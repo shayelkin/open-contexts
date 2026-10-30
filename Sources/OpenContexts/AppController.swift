@@ -176,6 +176,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 fullscreen: windowService.fullscreenScreenIDs.contains(id),
                 enabled: settings.sidebarMode != .hidden,
                 showUngrouped: settings.showUngrouped,
+                showUngroupedTitle: settings.showUngroupedTitle,
                 showCreateGroup: settings.showCreateGroup,
                 verticalAlignment: settings.sidebarVerticalAlignment,
                 sidebarWidth: CGFloat(settings.sidebarWidth),

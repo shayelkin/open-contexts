@@ -6,6 +6,7 @@
 "Vertical alignment" = "縦位置";
 "Sidebar width" = "サイドバーの幅";
 "Show Ungrouped (hidden when empty)" = "未分類を表示（空の場合は非表示）";
+"Show Ungrouped title" = "未分類の見出しを表示";
 "Show New Group button" = "新規グループボタンを表示";
 "Left" = "左";
 "Right" = "右";

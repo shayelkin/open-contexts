@@ -6,6 +6,7 @@
 "Vertical alignment" = "垂直位置";
 "Sidebar width" = "侧边栏宽度";
 "Show Ungrouped (hidden when empty)" = "显示未分组（为空时自动隐藏）";
+"Show Ungrouped title" = "显示未分组标题";
 "Show New Group button" = "显示新建分组按钮";
 "Left" = "左";
 "Right" = "右";

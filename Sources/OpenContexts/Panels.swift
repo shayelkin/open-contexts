@@ -31,6 +31,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
     private var fullscreen = false
     private var enabled = true
     private var showUngrouped = true
+    private var showUngroupedTitle = true
     private var showCreateGroup = true
     private var hasVisibleContent = true
     private var verticalAlignment: SidebarVerticalAlignment = .center
@@ -69,6 +70,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
         let fullscreen: Bool
         let enabled: Bool
         let showUngrouped: Bool
+        let showUngroupedTitle: Bool
         let showCreateGroup: Bool
         let verticalAlignment: SidebarVerticalAlignment
         let sidebarWidth: CGFloat
@@ -182,7 +184,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
 
     func update(groups: [WindowGroup], windowsByGroup: [String: [WindowInfo]],
                 alwaysVisible: Bool, fullscreen: Bool, enabled: Bool = true,
-                showUngrouped: Bool = true, showCreateGroup: Bool = true,
+                showUngrouped: Bool = true, showUngroupedTitle: Bool = true, showCreateGroup: Bool = true,
                 verticalAlignment: SidebarVerticalAlignment = .center,
                 sidebarWidth: CGFloat = CGFloat(AppSettings.defaultSidebarWidth),
                 position: SidebarPosition = .right,
@@ -207,6 +209,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
             pendingUpdate = PendingSidebarUpdate(groups: groups, windowsByGroup: windowsByGroup,
                                                  alwaysVisible: alwaysVisible, fullscreen: fullscreen,
                                                  enabled: enabled, showUngrouped: showUngrouped,
+                                                 showUngroupedTitle: showUngroupedTitle,
                                                  showCreateGroup: showCreateGroup,
                                                  verticalAlignment: verticalAlignment,
                                                  sidebarWidth: sidebarWidth,
@@ -220,8 +223,10 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
         self.sidebarWidth = sidebarWidth
         self.verticalAlignment = verticalAlignment
         let groupVisibilityChanged = self.showUngrouped != showUngrouped
+            || self.showUngroupedTitle != showUngroupedTitle
             || self.showCreateGroup != showCreateGroup
         self.showUngrouped = showUngrouped
+        self.showUngroupedTitle = showUngroupedTitle
         self.showCreateGroup = showCreateGroup
         self.itemDisplayMode = itemDisplayMode
         self.language = language
@@ -271,6 +276,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
                 onClick: nil,
                 onDraggingChanged: { [weak self] in self?.sourceDraggingChanged($0) }
             )
+            header.isHidden = group.id == GroupStore.ungroupedID && !showUngroupedTitle
             if group.id != GroupStore.ungroupedID {
                 let menu = NSMenu()
                 let rename = NSMenuItem(title: L10n.text("Rename", language: language), action: #selector(renameGroup(_:)), keyEquivalent: "")
@@ -327,7 +333,9 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
             naturalContentHeight = 44
             configureBottomItemWidths()
         } else {
-            naturalContentHeight = Self.contentHeight(groupCount: visibleGroups.count,
+            naturalContentHeight = Self.contentHeight(groupCount: visibleGroups.filter {
+                $0.id != GroupStore.ungroupedID || showUngroupedTitle
+            }.count,
                                                       windowCount: visibleGroups.reduce(0) {
                 $0 + windowsByGroup[$1.id, default: []].count
             }, showCreateGroup: showCreateGroup)
@@ -563,7 +571,8 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
         let next = pendingUpdate ?? PendingSidebarUpdate(
             groups: renderedGroups, windowsByGroup: renderedWindows,
             alwaysVisible: alwaysVisible, fullscreen: fullscreen,
-            enabled: enabled, showUngrouped: showUngrouped, showCreateGroup: showCreateGroup,
+            enabled: enabled, showUngrouped: showUngrouped, showUngroupedTitle: showUngroupedTitle,
+            showCreateGroup: showCreateGroup,
             verticalAlignment: verticalAlignment, sidebarWidth: sidebarWidth, position: position,
             itemDisplayMode: itemDisplayMode, language: language
         )
@@ -575,6 +584,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
         update(groups: next.groups, windowsByGroup: next.windowsByGroup,
                alwaysVisible: next.alwaysVisible, fullscreen: next.fullscreen,
                enabled: next.enabled, showUngrouped: next.showUngrouped,
+               showUngroupedTitle: next.showUngroupedTitle,
                showCreateGroup: next.showCreateGroup, verticalAlignment: next.verticalAlignment,
                sidebarWidth: next.sidebarWidth,
                position: next.position, itemDisplayMode: next.itemDisplayMode,
@@ -683,7 +693,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
             switch row.style {
             case .group(let id):
                 currentGroup = id
-                if coordinate <= primaryMax(row.frame) { return (id, nextID) }
+                if !row.isHidden, coordinate <= primaryMax(row.frame) { return (id, nextID) }
             case .window(let id, _):
                 guard let currentGroup else { continue }
                 if coordinate <= primaryMid(row.frame) { return (currentGroup, id) }
@@ -697,7 +707,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
 
     private func groupDestination(at coordinate: CGFloat) -> String? {
         for row in sidebarRows {
-            if case .group(let id) = row.style, coordinate <= primaryMid(row.frame) { return id }
+            if case .group(let id) = row.style, !row.isHidden, coordinate <= primaryMid(row.frame) { return id }
         }
         return nil
     }
@@ -832,6 +842,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
         let contentWidth = max(0, area.width - stack.edgeInsets.left - stack.edgeInsets.right)
         let windows = sidebarRows.filter { if case .window = $0.style { return true }; return false }
         let fixedViews = stack.arrangedSubviews.filter { view in
+            guard !view.isHidden else { return false }
             guard let row = view as? SidebarItemView else { return true }
             if case .window = row.style { return false }
             return true
@@ -1042,8 +1053,22 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
     fileprivate func smokePreviewWindow(_ id: String, groupID: String, beforeWindowID: String?) {
         preview(.window(id: id, groupID: groupID, beforeWindowID: beforeWindowID))
     }
+    fileprivate var smokeVisibleRowOrder: [String] {
+        sidebarRows.filter { !$0.isHidden }.map {
+            switch $0.style {
+            case .group(let id): "g:\(id)"
+            case .window(let id, _): "w:\(id)"
+            }
+        }
+    }
+    fileprivate var smokeFirstVisibleRowStartsAtEdge: Bool {
+        guard let first = sidebarRows.first(where: { !$0.isHidden }) else { return false }
+        let start = position == .bottom ? first.frame.minX : first.frame.minY
+        let inset = position == .bottom ? stack.edgeInsets.left : stack.edgeInsets.top
+        return abs(start - inset) < 0.5
+    }
     fileprivate var smokeRowCoordinates: [CGFloat] {
-        sidebarRows.flatMap { row in
+        sidebarRows.filter { !$0.isHidden }.flatMap { row in
             [primaryMid(row.frame) - 1, primaryMid(row.frame) + 1, primaryMax(row.frame) - 1]
         }
     }
@@ -2565,6 +2590,67 @@ enum PanelSmokeCheck {
                 }
                 sidebar.smokeEndDrag()
             }
+        }
+
+        for position in SidebarPosition.allCases {
+            sidebar.update(groups: dragGroups, windowsByGroup: coordinateWindows,
+                           alwaysVisible: true, fullscreen: false, position: position)
+            let titledHeight = sidebar.smokeNaturalContentHeight
+            sidebar.update(groups: dragGroups, windowsByGroup: coordinateWindows,
+                           alwaysVisible: true, fullscreen: false, showUngroupedTitle: false, position: position)
+            sidebar.contentView?.layoutSubtreeIfNeeded()
+            guard sidebar.smokeRowOrder.first == "g:\(GroupStore.ungroupedID)",
+                  sidebar.smokeVisibleRowOrder == [
+                      "w:\(windows[4].id)", "w:\(windows[5].id)",
+                      "g:\(firstGroupID)", "w:\(windows[6].id)", "w:\(windows[7].id)",
+                      "g:\(secondGroupID)", "w:\(windows[8].id)", "w:\(windows[9].id)"
+                  ],
+                  sidebar.smokeFirstVisibleRowStartsAtEdge,
+                  position == .bottom || abs(titledHeight - sidebar.smokeNaturalContentHeight - 32) < 1 else {
+                sidebar.close()
+                return fail("sidebar Ungrouped title was not hidden at \(position): \(sidebar.smokeVisibleRowOrder) \(sidebar.smokeLayoutDescription)")
+            }
+            let coordinates = sidebar.smokeRowCoordinates
+            sidebar.smokeBeginDrag()
+            sidebar.smokePreviewWindow(windows[6].id, at: coordinates[0])
+            guard sidebar.smokeRowOrder == [
+                "g:\(GroupStore.ungroupedID)", "w:\(windows[6].id)", "w:\(windows[4].id)", "w:\(windows[5].id)",
+                "g:\(firstGroupID)", "w:\(windows[7].id)",
+                "g:\(secondGroupID)", "w:\(windows[8].id)", "w:\(windows[9].id)"
+            ] else {
+                sidebar.close()
+                return fail("sidebar drop above first untitled Ungrouped window missed Ungrouped: \(sidebar.smokeRowOrder)")
+            }
+            sidebar.smokeEndDrag()
+            for source in windows[4...9] {
+                sidebar.smokeBeginDrag()
+                for coordinate in coordinates + coordinates.reversed() {
+                    sidebar.smokePreviewWindow(source.id, at: coordinate)
+                    let order = sidebar.smokeRowOrder
+                    guard order.first == "g:\(GroupStore.ungroupedID)" else {
+                        sidebar.close()
+                        return fail("sidebar drop moved a window above untitled Ungrouped: \(order)")
+                    }
+                    for _ in 0..<4 {
+                        sidebar.smokePreviewWindow(source.id, at: coordinate)
+                        guard sidebar.smokeRowOrder == order else {
+                            sidebar.close()
+                            return fail("sidebar untitled Ungrouped stationary drop moved at \(position) \(coordinate): \(order) -> \(sidebar.smokeRowOrder)")
+                        }
+                    }
+                }
+                sidebar.smokeEndDrag()
+            }
+        }
+        sidebar.update(groups: dragGroups, windowsByGroup: coordinateWindows,
+                       alwaysVisible: true, fullscreen: false, showUngrouped: false,
+                       showUngroupedTitle: false, position: .right)
+        guard sidebar.smokeRowOrder == [
+            "g:\(firstGroupID)", "w:\(windows[6].id)", "w:\(windows[7].id)",
+            "g:\(secondGroupID)", "w:\(windows[8].id)", "w:\(windows[9].id)"
+        ] else {
+            sidebar.close()
+            return fail("hidden Ungrouped title setting changed hidden Ungrouped rows: \(sidebar.smokeRowOrder)")
         }
 
         let pinStore = GroupStore(fileURL: FileManager.default.temporaryDirectory

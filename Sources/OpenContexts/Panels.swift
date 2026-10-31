@@ -157,6 +157,11 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
+    override func orderOut(_ sender: Any?) {
+        SidebarTooltipPanel.shared.hide(in: self)
+        super.orderOut(sender)
+    }
+
     var isShortcutExpanded: Bool { hoverState.isShortcutExpanded }
     var canDismissShortcut: Bool { isShortcutExpanded && !contextMenuOpen && !dragging }
 
@@ -1004,6 +1009,44 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
         return !windows.isEmpty && windows.allSatisfy(\.smokeTitleVisibilityIsValid)
     }
 
+    fileprivate func smokeTooltipsAreValid(expected: [String: Bool]) -> Bool {
+        contentView?.layoutSubtreeIfNeeded()
+        let tooltip = SidebarTooltipPanel.shared
+        let rows = sidebarRows.compactMap { row -> (row: SidebarItemView, id: String)? in
+            guard case .window(let id, _) = row.style else { return nil }
+            return (row, id)
+        }
+        guard let screen, !rows.isEmpty, Set(rows.map(\.id)) == Set(expected.keys) else { return false }
+        func pointer(over row: SidebarItemView) -> NSPoint {
+            convertPoint(toScreen: row.convert(NSPoint(x: row.bounds.midX, y: row.bounds.midY), to: nil))
+        }
+        for (row, id) in rows {
+            row.smokeHover(false)
+            guard row.smokeNeedsTooltip == expected[id] else { return false }
+            row.smokeHover(true)
+            guard !tooltip.isVisible, row.smokeTooltipPending == expected[id] else { return false }
+            let location = pointer(over: row)
+            row.smokeFireTooltip(at: location)
+            let shown = tooltip.isVisible && tooltip.owner === row
+            guard shown == expected[id] else { return false }
+            if shown {
+                guard tooltip.smokeText == row.smokeTitle, tooltip.smokeTextFits,
+                      screen.visibleFrame.contains(tooltip.frame), !tooltip.frame.contains(location) else { return false }
+            }
+            row.smokeHover(false)
+            guard !tooltip.isVisible, !row.smokeTooltipPending else { return false }
+        }
+        guard let truncated = rows.first(where: { expected[$0.id] == true })?.row else { return true }
+        truncated.smokeHover(true)
+        truncated.smokeFireTooltip(at: pointer(over: truncated))
+        guard tooltip.isVisible else { return false }
+        orderOut(nil)
+        let hiddenWithSidebar = !tooltip.isVisible
+        truncated.smokeHover(false)
+        layoutPanel()
+        return hiddenWithSidebar && isVisible
+    }
+
     fileprivate func smokeWindowItemsAreValid(showsTitle: Bool, maximumWidth: CGFloat) -> Bool {
         let windows = sidebarRows.filter { if case .window = $0.style { return true }; return false }
         return !windows.isEmpty && windows.allSatisfy {
@@ -1478,6 +1521,7 @@ private final class SidebarItemView: NSView, NSDraggingSource {
     private var trackingArea: NSTrackingArea?
     private var selected = false
     private var hovered = false
+    private var tooltipTimer: Timer?
 
     init(title: String, icon: NSImage? = nil, iconKey: String? = nil,
          badgeKey: String? = nil, badge: String? = nil,
@@ -1498,7 +1542,7 @@ private final class SidebarItemView: NSView, NSDraggingSource {
         layer?.masksToBounds = true
         setAccessibilityRole(onClick == nil ? .group : .button)
         setAccessibilityLabel(title)
-        toolTip = title
+        if case .group = style { toolTip = title }
 
         titleLabel.font = switch style {
         case .group: .systemFont(ofSize: 12, weight: .semibold)
@@ -1634,9 +1678,18 @@ private final class SidebarItemView: NSView, NSDraggingSource {
     }
 
     fileprivate var smokeTitleVisibilityIsValid: Bool {
-        showsTitle == (titleLabel.superview != nil) && toolTip?.isEmpty == false
+        showsTitle == (titleLabel.superview != nil) && toolTip == nil
     }
     fileprivate var smokeShowsTitle: Bool { showsTitle }
+    fileprivate var smokeTitle: String { titleLabel.stringValue }
+    fileprivate var smokeNeedsTooltip: Bool { needsTooltip }
+    fileprivate var smokeTooltipPending: Bool { tooltipTimer?.isValid == true }
+    fileprivate func smokeHover(_ hovered: Bool) { setHovered(hovered) }
+
+    fileprivate func smokeFireTooltip(at pointer: NSPoint) {
+        tooltipTimer?.invalidate()
+        showTooltip(at: pointer)
+    }
 
     fileprivate var smokeHoverAppearanceIsValid: Bool {
         switch style {
@@ -1697,8 +1750,14 @@ private final class SidebarItemView: NSView, NSDraggingSource {
     }
 
     override func mouseDown(with event: NSEvent) {
+        hideTooltip()
         mouseDownPoint = convert(event.locationInWindow, from: nil)
         dragging = false
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        if newWindow == nil { hideTooltip() }
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -1742,8 +1801,45 @@ private final class SidebarItemView: NSView, NSDraggingSource {
     }
 
     private func setHovered(_ hovered: Bool) {
+        let changed = self.hovered != hovered
         self.hovered = hovered
         updateAppearance()
+        if changed { scheduleTooltip() }
+    }
+
+    private var needsTooltip: Bool {
+        guard case .window = style else { return false }
+        return SidebarTooltipLayout.needsTooltip(showsTitle: showsTitle,
+                                                 titleWidth: titleLabel.intrinsicContentSize.width,
+                                                 availableWidth: titleLabel.bounds.width)
+    }
+
+    private func scheduleTooltip() {
+        tooltipTimer?.invalidate()
+        tooltipTimer = nil
+        guard hovered, needsTooltip else {
+            SidebarTooltipPanel.shared.hide(for: self)
+            return
+        }
+        let delay = SidebarTooltipLayout.initialDelay(
+            milliseconds: UserDefaults.standard.object(forKey: SidebarTooltipLayout.initialDelayDefaultsKey))
+        let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.showTooltip(at: NSEvent.mouseLocation) }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        tooltipTimer = timer
+    }
+
+    private func showTooltip(at pointer: NSPoint) {
+        tooltipTimer = nil
+        guard hovered, !dragging, needsTooltip, let window, window.isVisible, let screen = window.screen else { return }
+        SidebarTooltipPanel.shared.show(titleLabel.stringValue, for: self, at: pointer, on: screen)
+    }
+
+    private func hideTooltip() {
+        tooltipTimer?.invalidate()
+        tooltipTimer = nil
+        SidebarTooltipPanel.shared.hide(for: self)
     }
 
     private func updateAppearance() {
@@ -1754,6 +1850,87 @@ private final class SidebarItemView: NSView, NSDraggingSource {
         titleLabel.textColor = highlighted ? .white : .labelColor
         titleLabel.font = .systemFont(ofSize: 13, weight: selected ? .medium : .regular)
         setAccessibilitySelected(selected)
+    }
+}
+
+// AppKit only shows `toolTip` while the app is active. OpenContexts is an LSUIElement app whose
+// sidebar is a non-activating panel, so it is almost never active and standard tooltips never appear;
+// this panel draws them ourselves from hover tracking that works regardless of activation.
+@MainActor
+private final class SidebarTooltipPanel: NSPanel {
+    static let shared = SidebarTooltipPanel()
+    private static let maximumTextWidth: CGFloat = 360
+    private static let padding = NSSize(width: 6, height: 3)
+    private let label = NSTextField(wrappingLabelWithString: "")
+    private(set) weak var owner: NSView?
+
+    private init() {
+        super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
+                   backing: .buffered, defer: true)
+        level = .popUpMenu
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        ignoresMouseEvents = true
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = true
+        hidesOnDeactivate = false
+
+        let effect = NSVisualEffectView()
+        effect.material = .toolTip
+        effect.state = .active
+        effect.wantsLayer = true
+        effect.layer?.cornerRadius = 5
+        effect.layer?.masksToBounds = true
+        label.font = .toolTipsFont(ofSize: 0)
+        label.textColor = .labelColor
+        effect.addSubview(label)
+        contentView = effect
+    }
+
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
+
+    func show(_ text: String, for owner: NSView, at pointer: NSPoint, on screen: NSScreen) {
+        guard let cell = label.cell else { return }
+        self.owner = owner
+        label.stringValue = text
+        let area = screen.visibleFrame
+        let padding = Self.padding
+        let textWidth = min(Self.maximumTextWidth, area.width - padding.width * 2)
+        let textSize = cell.cellSize(forBounds: NSRect(x: 0, y: 0, width: textWidth,
+                                                       height: .greatestFiniteMagnitude))
+        let size = NSSize(width: ceil(textSize.width) + padding.width * 2,
+                          height: ceil(textSize.height) + padding.height * 2)
+        let target = SidebarTooltipLayout.frame(size: size, pointer: pointer, screen: area)
+        label.frame = NSRect(x: padding.width, y: padding.height,
+                             width: target.width - padding.width * 2, height: target.height - padding.height * 2)
+        setFrame(target, display: true)
+        invalidateShadow()
+        orderFrontRegardless()
+    }
+
+    func hide(for owner: NSView) {
+        guard owner === self.owner else { return }
+        hide()
+    }
+
+    func hide(in window: NSWindow) {
+        guard owner?.window === window else { return }
+        hide()
+    }
+
+    private func hide() {
+        owner = nil
+        orderOut(nil)
+    }
+
+    fileprivate var smokeText: String { label.stringValue }
+
+    fileprivate var smokeTextFits: Bool {
+        guard let cell = label.cell else { return false }
+        let needed = cell.cellSize(forBounds: NSRect(x: 0, y: 0, width: label.bounds.width,
+                                                     height: .greatestFiniteMagnitude))
+        return needed.width <= label.bounds.width + 0.5 && needed.height <= label.bounds.height + 0.5
     }
 }
 
@@ -2096,6 +2273,21 @@ enum PanelSmokeCheck {
                         sidebar.close()
                         return fail("sidebar retained an inactive window highlight")
                     }
+                }
+            }
+        }
+        let shortTitleWindow = WindowInfo(id: "smoke-short", appID: "smoke", appName: "Smoke", title: "A",
+                                          processID: ProcessInfo.processInfo.processIdentifier)
+        for position in SidebarPosition.allCases {
+            for displayMode in SidebarItemDisplayMode.allCases {
+                sidebar.update(groups: groups,
+                               windowsByGroup: [GroupStore.ungroupedID: [windows[0], shortTitleWindow]],
+                               alwaysVisible: true, fullscreen: false, position: position,
+                               itemDisplayMode: displayMode)
+                let expected = [windows[0].id: true, shortTitleWindow.id: displayMode == .icon]
+                guard sidebar.smokeTooltipsAreValid(expected: expected) else {
+                    sidebar.close()
+                    return fail("sidebar tooltip mismatch position=\(position) mode=\(displayMode.rawValue)")
                 }
             }
         }

@@ -26,6 +26,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
     private let onCreateGroup: (String) -> Void
     private let onRenameGroup: (String, String) -> Void
     private let onDeleteGroup: (String) -> Void
+    private let onResize: (CGFloat) -> Void
     private let displayScreen: NSScreen
     private var alwaysVisible = false
     private var fullscreen = false
@@ -69,6 +70,9 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
     private var revealTarget: Double = 0
     private var revealTimer: Timer?
     private var revealTimestamp: TimeInterval = 0
+    private let resizeHandle = SidebarResizeHandle()
+    private var resizeHandleConstraints: [NSLayoutConstraint] = []
+    private var resizeStart: (width: CGFloat, pointerX: CGFloat)?
 
     private struct PendingSidebarUpdate {
         let groups: [WindowGroup]
@@ -98,7 +102,8 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
          onMoveWindow: @escaping WindowMove, onMoveGroup: @escaping GroupMove,
          onCreateGroup: @escaping (String) -> Void,
          onRenameGroup: @escaping (String, String) -> Void,
-         onDeleteGroup: @escaping (String) -> Void) {
+         onDeleteGroup: @escaping (String) -> Void,
+         onResize: @escaping (CGFloat) -> Void) {
         self.displayScreen = screen
         self.onActivate = onActivate
         self.canCloseWindow = canCloseWindow
@@ -110,6 +115,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
         self.onCreateGroup = onCreateGroup
         self.onRenameGroup = onRenameGroup
         self.onDeleteGroup = onDeleteGroup
+        self.onResize = onResize
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
                    backing: .buffered, defer: false)
 
@@ -146,8 +152,14 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
         }
         scroll.documentView = stack
 
+        resizeHandle.translatesAutoresizingMaskIntoConstraints = false
+        resizeHandle.onBegin = { [weak self] in self?.beginResize(at: $0) }
+        resizeHandle.onDrag = { [weak self] in self?.resize(to: $0) }
+        resizeHandle.onEnd = { [weak self] in self?.endResize() }
+
         rootView.addSubview(effect)
         effect.addSubview(scroll)
+        effect.addSubview(resizeHandle)
         contentView = rootView
         NSLayoutConstraint.activate([
             scroll.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
@@ -203,9 +215,10 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
                 position: SidebarPosition = .right,
                 itemDisplayMode: SidebarItemDisplayMode = .iconAndTitle,
                 language: AppLanguage = .system) {
+        let requestedWidth = resizeStart == nil ? sidebarWidth : self.sidebarWidth
         let presentationChanged = self.alwaysVisible != alwaysVisible || self.fullscreen != fullscreen
             || self.enabled != enabled || self.verticalAlignment != verticalAlignment
-            || self.sidebarWidth != sidebarWidth
+            || self.sidebarWidth != requestedWidth
         if self.enabled != enabled {
             hoverState = SidebarHoverState()
             if enabled {
@@ -225,15 +238,15 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
                                                  showUngroupedTitle: showUngroupedTitle,
                                                  showCreateGroup: showCreateGroup,
                                                  verticalAlignment: verticalAlignment,
-                                                 sidebarWidth: sidebarWidth,
+                                                 sidebarWidth: requestedWidth,
                                                  position: position, itemDisplayMode: itemDisplayMode,
                                                  language: language)
             layoutPanel()
             return
         }
         self.position = position
-        let widthChanged = self.sidebarWidth != sidebarWidth
-        self.sidebarWidth = sidebarWidth
+        let widthChanged = self.sidebarWidth != requestedWidth
+        self.sidebarWidth = requestedWidth
         self.verticalAlignment = verticalAlignment
         let groupVisibilityChanged = self.showUngrouped != showUngrouped
             || self.showUngroupedTitle != showUngroupedTitle
@@ -498,7 +511,8 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
             return
         }
         let frames = sidebarFrames()
-        let expanded = hoverState.isExpanded || dragging || contextMenuOpen || (alwaysVisible && !fullscreen)
+        let expanded = hoverState.isExpanded || dragging || contextMenuOpen || resizeStart != nil
+            || (alwaysVisible && !fullscreen)
         effectHeightConstraint?.constant = frames.expanded.height
         revealTarget = expanded ? 1 : 0
         if !animatesVisibility { revealProgress = revealTarget }
@@ -606,7 +620,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
         let trigger = SidebarHoverState.edgeTriggerFrame(edge: frames.edge, screen: displayScreen.frame,
                                                          vertical: position != .bottom)
         if hoverState.update(pointer: pointer, edgeFrame: trigger, expandedFrame: frames.expanded,
-                             dragging: dragging, menuOpen: contextMenuOpen, now: now) {
+                             dragging: dragging || resizeStart != nil, menuOpen: contextMenuOpen, now: now) {
             layoutPanel()
         }
     }
@@ -889,6 +903,44 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
         }
         NSLayoutConstraint.activate(positionConstraints)
         stackCrossAxisConstraint?.isActive = true
+
+        NSLayoutConstraint.deactivate(resizeHandleConstraints)
+        resizeHandle.isHidden = !canResize
+        resizeHandleConstraints = [
+            resizeHandle.widthAnchor.constraint(equalToConstant: 5),
+            resizeHandle.topAnchor.constraint(equalTo: effect.topAnchor),
+            resizeHandle.bottomAnchor.constraint(equalTo: effect.bottomAnchor),
+            position == .left
+                ? resizeHandle.trailingAnchor.constraint(equalTo: effect.trailingAnchor)
+                : resizeHandle.leadingAnchor.constraint(equalTo: effect.leadingAnchor)
+        ]
+        NSLayoutConstraint.activate(resizeHandleConstraints)
+    }
+
+    private var canResize: Bool { position != .bottom && itemDisplayMode == .iconAndTitle }
+
+    private func beginResize(at pointerX: CGFloat) {
+        guard canResize else { return }
+        resizeStart = (sidebarWidth, pointerX)
+    }
+
+    private func resize(to pointerX: CGFloat) {
+        guard let resizeStart, canResize else { return }
+        let range = CGFloat(AppSettings.sidebarWidthRange.lowerBound)...CGFloat(AppSettings.sidebarWidthRange.upperBound)
+        let width = SidebarResize.width(startWidth: resizeStart.width, startPointerX: resizeStart.pointerX,
+                                        pointerX: pointerX, dockedRight: position == .right, range: range)
+        guard width != sidebarWidth else { return }
+        sidebarWidth = width
+        configurePosition()
+        layoutPanel()
+        layoutDocumentView()
+    }
+
+    private func endResize() {
+        guard let resizeStart else { return }
+        self.resizeStart = nil
+        if sidebarWidth != resizeStart.width { onResize(sidebarWidth) }
+        layoutPanel()
     }
 
     private func constrainSidebarItem(_ view: NSView) {
@@ -1234,6 +1286,26 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
     }
 
     fileprivate func smokeAdvanceReveal(by elapsed: TimeInterval) { advanceReveal(elapsed: elapsed) }
+
+    fileprivate func smokeBeginResize(at x: CGFloat) { resizeHandle.onBegin?(x) }
+    fileprivate func smokeResize(to x: CGFloat) { resizeHandle.onDrag?(x) }
+    fileprivate func smokeEndResize() { resizeHandle.onEnd?() }
+
+    fileprivate var smokeResizeHandleIsValid: Bool {
+        rootView.layoutSubtreeIfNeeded()
+        guard canResize else { return resizeHandle.isHidden }
+        let handle = resizeHandle.convert(resizeHandle.bounds, to: rootView)
+        let innerEdge = position == .left ? rootView.bounds.maxX : rootView.bounds.minX
+        let atInnerEdge = position == .left ? abs(handle.maxX - innerEdge) < 0.5 : abs(handle.minX - innerEdge) < 0.5
+        let topmost = effect.hitTest(NSPoint(x: handle.midX, y: handle.midY)) === resizeHandle
+        return !resizeHandle.isHidden && atInnerEdge && topmost && abs(handle.width - 5) < 0.5
+            && abs(handle.height - rootView.bounds.height) < 0.5
+    }
+
+    fileprivate var smokeEffectWidth: CGFloat {
+        rootView.layoutSubtreeIfNeeded()
+        return effect.frame.width
+    }
     fileprivate var smokeRevealIsAnimating: Bool { revealTimer?.isValid == true }
 
     fileprivate var smokeRevealDescription: String {
@@ -1950,6 +2022,51 @@ private final class SidebarItemView: NSView, NSDraggingSource {
     }
 }
 
+@MainActor
+private final class SidebarResizeHandle: NSView {
+    var onBegin: ((CGFloat) -> Void)?
+    var onDrag: ((CGFloat) -> Void)?
+    var onEnd: (() -> Void)?
+    private var trackingArea: NSTrackingArea?
+    private var hovered = false
+    private var resizing = false
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea { removeTrackingArea(trackingArea) }
+        let trackingArea = NSTrackingArea(rect: .zero,
+                                          options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                          owner: self)
+        addTrackingArea(trackingArea)
+        self.trackingArea = trackingArea
+    }
+
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .resizeLeftRight) }
+
+    override func mouseEntered(with event: NSEvent) {
+        hovered = true
+        NSCursor.resizeLeftRight.set()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        hovered = false
+        if !resizing { NSCursor.arrow.set() }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        resizing = true
+        onBegin?(NSEvent.mouseLocation.x)
+    }
+
+    override func mouseDragged(with event: NSEvent) { onDrag?(NSEvent.mouseLocation.x) }
+
+    override func mouseUp(with event: NSEvent) {
+        resizing = false
+        onEnd?()
+        if !hovered { NSCursor.arrow.set() }
+    }
+}
+
 // AppKit only shows `toolTip` while the app is active. OpenContexts is an LSUIElement app whose
 // sidebar is a non-activating panel, so it is almost never active and standard tooltips never appear;
 // this panel draws them ourselves from hover tracking that works regardless of activation.
@@ -2301,6 +2418,7 @@ enum PanelSmokeCheck {
         var windowMoves: [(String, String, String?)] = []
         var groupMoves: [(String, String?)] = []
         var closedWindowIDs: [String] = []
+        var resizedWidths: [CGFloat] = []
         let sidebar = SidebarPanel(
             screen: screen,
             onActivate: { _ in },
@@ -2312,7 +2430,8 @@ enum PanelSmokeCheck {
             onMoveGroup: { groupMoves.append(($0, $1)) },
             onCreateGroup: { _ in },
             onRenameGroup: { _, _ in },
-            onDeleteGroup: { _ in }
+            onDeleteGroup: { _ in },
+            onResize: { resizedWidths.append($0) }
         )
         sidebar.smokeStopHoverPolling()
         sidebar.smokeSetAnimatesVisibility(false)
@@ -2726,6 +2845,81 @@ enum PanelSmokeCheck {
         }
         sidebar.smokeSetReduceMotion(nil)
         sidebar.smokeSetAnimatesVisibility(false)
+
+        let widthRange = CGFloat(AppSettings.sidebarWidthRange.lowerBound)...CGFloat(AppSettings.sidebarWidthRange.upperBound)
+        for position in [SidebarPosition.left, .right] {
+            sidebar.update(groups: groups, windowsByGroup: [GroupStore.ungroupedID: [windows[0]]],
+                           alwaysVisible: false, fullscreen: false, sidebarWidth: 188, position: position)
+            let frames = sidebar.smokeSidebarFrames
+            let outsidePoint = CGPoint(x: frames.expanded.midX, y: frames.expanded.maxY + 40)
+            sidebar.smokeUpdateHover(pointer: CGPoint(x: frames.edge.midX, y: frames.edge.midY), now: 20)
+            guard !sidebar.smokeIsHidden, sidebar.smokeResizeHandleIsValid else {
+                sidebar.close()
+                return fail("sidebar resize handle missing at inner edge: \(position) \(sidebar.smokeLayoutDescription)")
+            }
+            let grow: CGFloat = position == .right ? -1 : 1
+            let innerX = position == .right ? sidebar.frame.minX : sidebar.frame.maxX
+            resizedWidths = []
+            sidebar.smokeBeginResize(at: innerX)
+            func resized(to width: CGFloat) -> Bool {
+                sidebar.contentView?.layoutSubtreeIfNeeded()
+                return edgeFrame(sidebar.frame, in: area, position: position, width: width)
+                    && abs(sidebar.smokeEffectWidth - width) < 0.5 && sidebar.smokeResizeHandleIsValid
+                    && sidebar.smokeWindowItemsAreValid(showsTitle: true, maximumWidth: width)
+            }
+            for (offset, expected) in [(50, 238), (-50, 138), (5000, widthRange.upperBound),
+                                       (-5000, widthRange.lowerBound), (50.4, 238)] as [(CGFloat, CGFloat)] {
+                sidebar.smokeResize(to: innerX + grow * offset)
+                guard resized(to: expected) else {
+                    sidebar.close()
+                    return fail("sidebar resize to \(expected) mismatch: \(position) \(sidebar.smokeLayoutDescription)")
+                }
+            }
+            sidebar.smokeUpdateHover(pointer: outsidePoint, now: 21)
+            sidebar.smokeUpdateHover(pointer: outsidePoint, now: 22)
+            sidebar.update(groups: groups, windowsByGroup: [GroupStore.ungroupedID: [windows[0]]],
+                           alwaysVisible: false, fullscreen: false, sidebarWidth: 188, position: position)
+            guard !sidebar.smokeIsHidden, resized(to: 238), resizedWidths.isEmpty else {
+                sidebar.close()
+                return fail("sidebar resize was interrupted by hover or settings: \(position) \(sidebar.smokeLayoutDescription)")
+            }
+            sidebar.smokeEndResize()
+            sidebar.smokeEndResize()
+            guard resizedWidths == [238] else {
+                sidebar.close()
+                return fail("sidebar resize reported \(resizedWidths) instead of [238]")
+            }
+            sidebar.smokeUpdateHover(pointer: outsidePoint, now: 23)
+            sidebar.smokeUpdateHover(pointer: outsidePoint, now: 23.13)
+            guard sidebar.smokeIsHidden else {
+                sidebar.close()
+                return fail("sidebar did not collapse after resize ended: \(position)")
+            }
+            sidebar.update(groups: groups, windowsByGroup: [GroupStore.ungroupedID: [windows[0]]],
+                           alwaysVisible: true, fullscreen: false, sidebarWidth: 238, position: position)
+            sidebar.smokeBeginResize(at: innerX)
+            sidebar.smokeEndResize()
+            guard resized(to: 238), resizedWidths == [238] else {
+                sidebar.close()
+                return fail("sidebar click on resize handle changed width: \(position)")
+            }
+        }
+        for (position, mode) in [(SidebarPosition.bottom, SidebarItemDisplayMode.iconAndTitle), (.left, .icon), (.right, .icon)] {
+            sidebar.update(groups: groups, windowsByGroup: [GroupStore.ungroupedID: [windows[0]]],
+                           alwaysVisible: true, fullscreen: false, sidebarWidth: 188, position: position,
+                           itemDisplayMode: mode)
+            let before = sidebar.frame
+            resizedWidths = []
+            sidebar.smokeBeginResize(at: before.minX)
+            sidebar.smokeResize(to: before.minX - 80)
+            sidebar.smokeEndResize()
+            guard sidebar.smokeResizeHandleIsValid, sidebar.frame.approximatelyEquals(before), resizedWidths.isEmpty else {
+                sidebar.close()
+                return fail("sidebar resized where it should not: \(position) \(mode.rawValue)")
+            }
+        }
+        sidebar.update(groups: groups, windowsByGroup: [GroupStore.ungroupedID: [windows[0]]],
+                       alwaysVisible: true, fullscreen: false, position: .right)
 
         for position in [SidebarPosition.left, .right] {
             for width in [CGFloat(AppSettings.sidebarWidthRange.lowerBound), 188,

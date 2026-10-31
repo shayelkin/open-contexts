@@ -146,7 +146,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 },
                 onCreateGroup: { [weak self] in self?.groupStore.createGroup(name: $0) },
                 onRenameGroup: { [weak self] id, name in self?.groupStore.renameGroup(id: id, name: name) },
-                onDeleteGroup: { [weak self] in self?.groupStore.deleteGroup(id: $0) }
+                onDeleteGroup: { [weak self] in self?.groupStore.deleteGroup(id: $0) },
+                onResize: { [weak self] in self?.settings.setSidebarWidth(Double($0)) }
             )
             switchers[id] = SwitcherPanel(
                 screen: screen,

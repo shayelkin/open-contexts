@@ -61,7 +61,14 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
     private var positionConstraints: [NSLayoutConstraint] = []
     private var stackCrossAxisConstraint: NSLayoutConstraint?
     private var bottomItemWidthConstraints: [NSLayoutConstraint] = []
+    private var effectHeightConstraint: NSLayoutConstraint?
     private var previewDrop: SidebarDrop?
+    private var animatesVisibility = true
+    private var reduceMotion: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+    private var revealProgress: Double = 0
+    private var revealTarget: Double = 0
+    private var revealTimer: Timer?
+    private var revealTimestamp: TimeInterval = 0
 
     private struct PendingSidebarUpdate {
         let groups: [WindowGroup]
@@ -183,6 +190,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
     override func close() {
         hoverTimer?.invalidate()
         hoverTimer = nil
+        stopReveal()
         cancelIconRetries()
         super.close()
     }
@@ -482,22 +490,72 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
                 hoverTimer?.invalidate()
                 hoverTimer = nil
             }
+            stopReveal()
+            revealProgress = 0
+            revealTarget = 0
+            alphaValue = 1
             if isVisible { orderOut(nil) }
             return
         }
         let frames = sidebarFrames()
         let expanded = hoverState.isExpanded || dragging || contextMenuOpen || (alwaysVisible && !fullscreen)
-        let target = expanded ? frames.expanded : frames.edge
-        if expanded {
-            if !frame.approximatelyEquals(target) { setFrame(target, display: true) }
-            if !isVisible {
-                restartExhaustedIconRetries()
-                orderFrontRegardless()
-            }
-        } else {
+        effectHeightConstraint?.constant = frames.expanded.height
+        revealTarget = expanded ? 1 : 0
+        if !animatesVisibility { revealProgress = revealTarget }
+        if expanded, !isVisible { restartExhaustedIconRetries() }
+        applyReveal(frames)
+        if revealProgress == revealTarget { stopReveal() } else { startReveal() }
+    }
+
+    // The window itself grows out of the docked edge while the content stays pinned to its inner edge,
+    // so the content slides in with its blur and shadow and never spills onto a neighboring display.
+    private func applyReveal(_ frames: (edge: NSRect, expanded: NSRect)) {
+        guard revealProgress > 0 || revealTarget > 0 else {
             if isVisible { orderOut(nil) }
-            if !frame.approximatelyEquals(target) { setFrame(target, display: false) }
+            alphaValue = 1
+            if !frame.approximatelyEquals(frames.edge) { setFrame(frames.edge, display: false) }
+            return
         }
+        let fades = reduceMotion()
+        let target = fades ? frames.expanded
+            : SidebarReveal.frame(expanded: frames.expanded, edge: revealEdge, progress: revealProgress)
+        alphaValue = fades ? CGFloat(SidebarReveal.eased(revealProgress)) : 1
+        if !frame.approximatelyEquals(target) { setFrame(target, display: true) }
+        if !isVisible { orderFrontRegardless() }
+    }
+
+    private var revealEdge: SidebarReveal.Edge {
+        switch position {
+        case .left: .left
+        case .right: .right
+        case .bottom: .bottom
+        }
+    }
+
+    private func startReveal() {
+        guard revealTimer == nil else { return }
+        revealTimestamp = ProcessInfo.processInfo.systemUptime
+        let timer = Timer(timeInterval: 1.0 / 120, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let now = ProcessInfo.processInfo.systemUptime
+                self.advanceReveal(elapsed: now - self.revealTimestamp)
+                self.revealTimestamp = now
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        revealTimer = timer
+    }
+
+    private func stopReveal() {
+        revealTimer?.invalidate()
+        revealTimer = nil
+    }
+
+    private func advanceReveal(elapsed: TimeInterval) {
+        revealProgress = SidebarReveal.step(progress: revealProgress, toward: revealTarget, elapsed: elapsed)
+        if revealProgress == revealTarget { stopReveal() }
+        applyReveal(sidebarFrames())
     }
 
     private func sidebarFrames() -> (edge: NSRect, expanded: NSRect) {
@@ -810,20 +868,23 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
             ? stack.heightAnchor.constraint(equalTo: scroll.contentView.heightAnchor)
             : stack.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor)
         if bottom {
+            let height = effect.heightAnchor.constraint(equalToConstant: sidebarFrames().expanded.height)
+            effectHeightConstraint = height
             positionConstraints = [
                 effect.leadingAnchor.constraint(equalTo: rootView.leadingAnchor),
                 effect.trailingAnchor.constraint(equalTo: rootView.trailingAnchor),
                 effect.topAnchor.constraint(equalTo: rootView.topAnchor),
-                effect.bottomAnchor.constraint(equalTo: rootView.bottomAnchor)
+                height
             ]
         } else {
+            effectHeightConstraint = nil
             positionConstraints = [
                 effect.widthAnchor.constraint(equalToConstant: itemDisplayMode == .icon ? 44 : sidebarWidth),
                 effect.topAnchor.constraint(equalTo: rootView.topAnchor),
                 effect.bottomAnchor.constraint(equalTo: rootView.bottomAnchor),
                 position == .left
-                    ? effect.leadingAnchor.constraint(equalTo: rootView.leadingAnchor)
-                    : effect.trailingAnchor.constraint(equalTo: rootView.trailingAnchor)
+                    ? effect.trailingAnchor.constraint(equalTo: rootView.trailingAnchor)
+                    : effect.leadingAnchor.constraint(equalTo: rootView.leadingAnchor)
             ]
         }
         NSLayoutConstraint.activate(positionConstraints)
@@ -1163,6 +1224,40 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
     fileprivate func smokeStopHoverPolling() {
         hoverTimer?.invalidate()
         hoverTimer = nil
+    }
+
+    fileprivate func smokeSetAnimatesVisibility(_ animates: Bool) { animatesVisibility = animates }
+
+    fileprivate func smokeSetReduceMotion(_ value: Bool?) {
+        reduceMotion = value.map { value in { value } }
+            ?? { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+    }
+
+    fileprivate func smokeAdvanceReveal(by elapsed: TimeInterval) { advanceReveal(elapsed: elapsed) }
+    fileprivate var smokeRevealIsAnimating: Bool { revealTimer?.isValid == true }
+
+    fileprivate var smokeRevealDescription: String {
+        rootView.layoutSubtreeIfNeeded()
+        return "progress=\(revealProgress) target=\(revealTarget) visible=\(isVisible) alpha=\(alphaValue) animating=\(smokeRevealIsAnimating) reduceMotion=\(reduceMotion()) frame=\(frame) expanded=\(sidebarFrames().expanded) root=\(rootView.bounds) effect=\(effect.frame)"
+    }
+
+    fileprivate func smokeRevealIsConsistent(progress: Double) -> Bool {
+        guard abs(revealProgress - progress) < 1e-6, isVisible else { return false }
+        let frames = sidebarFrames()
+        let fades = reduceMotion()
+        let expected = fades ? frames.expanded
+            : SidebarReveal.frame(expanded: frames.expanded, edge: revealEdge, progress: progress)
+        let alpha = fades ? SidebarReveal.eased(progress) : 1
+        rootView.layoutSubtreeIfNeeded()
+        let content = effect.frame
+        let pinned = switch position {
+        case .left: abs(content.maxX - rootView.bounds.maxX) < 0.5 && abs(content.width - frames.expanded.width) < 0.5
+        case .right: abs(content.minX) < 0.5 && abs(content.width - frames.expanded.width) < 0.5
+        case .bottom: abs(content.maxY - rootView.bounds.maxY) < 0.5 && abs(content.height - frames.expanded.height) < 0.5
+        }
+        let roundedToWindowPoints = abs(frame.minX - expected.minX) <= 1 && abs(frame.minY - expected.minY) <= 1
+            && abs(frame.width - expected.width) <= 1 && abs(frame.height - expected.height) <= 1
+        return roundedToWindowPoints && abs(Double(alphaValue) - alpha) < 0.001 && pinned
     }
 
     fileprivate func smokeApplyBadges(_ badges: [String: String]) { updateBadges(badges) }
@@ -2220,6 +2315,7 @@ enum PanelSmokeCheck {
             onDeleteGroup: { _ in }
         )
         sidebar.smokeStopHoverPolling()
+        sidebar.smokeSetAnimatesVisibility(false)
         let windows = (0..<200).map {
             WindowInfo(id: "smoke-\($0)", appID: "smoke", appName: "Smoke",
                        title: "Window \($0) " + String(repeating: "Long title ", count: 40),
@@ -2576,6 +2672,60 @@ enum PanelSmokeCheck {
                 return fail("sidebar fullscreen did not collapse after leave: \(sidebar.smokeLayoutDescription)")
             }
         }
+
+        sidebar.smokeSetAnimatesVisibility(true)
+        for reduceMotion in [false, true] {
+            sidebar.smokeSetReduceMotion(reduceMotion)
+            for position in SidebarPosition.allCases {
+                sidebar.update(groups: groups, windowsByGroup: [GroupStore.ungroupedID: [windows[0]]],
+                               alwaysVisible: false, fullscreen: false, position: position)
+                let frames = sidebar.smokeSidebarFrames
+                let edgePoint = CGPoint(x: frames.edge.midX, y: frames.edge.midY)
+                let outsidePoint = CGPoint(x: frames.expanded.midX, y: frames.expanded.maxY + 40)
+                let label = "position=\(position) reduceMotion=\(reduceMotion)"
+                func revealFailure(_ message: String) -> Bool {
+                    let detail = sidebar.smokeRevealDescription
+                    sidebar.close()
+                    return fail("\(message): \(label) \(detail)")
+                }
+                guard sidebar.smokeIsHidden else { return revealFailure("animated sidebar started visible") }
+                sidebar.smokeUpdateHover(pointer: edgePoint, now: 10)
+                guard sidebar.smokeRevealIsAnimating, sidebar.smokeRevealIsConsistent(progress: 0) else {
+                    return revealFailure("sidebar reveal did not start from the edge")
+                }
+                sidebar.smokeAdvanceReveal(by: SidebarReveal.duration / 2)
+                guard sidebar.smokeRevealIsConsistent(progress: 0.5) else {
+                    return revealFailure("sidebar reveal midpoint mismatch")
+                }
+                sidebar.smokeAdvanceReveal(by: SidebarReveal.duration)
+                guard sidebar.smokeRevealIsConsistent(progress: 1), !sidebar.smokeRevealIsAnimating else {
+                    return revealFailure("sidebar reveal did not finish expanded")
+                }
+                sidebar.smokeUpdateHover(pointer: outsidePoint, now: 11)
+                sidebar.smokeUpdateHover(pointer: outsidePoint, now: 11.13)
+                guard sidebar.smokeRevealIsAnimating, sidebar.smokeRevealIsConsistent(progress: 1) else {
+                    return revealFailure("sidebar hide did not animate")
+                }
+                sidebar.smokeAdvanceReveal(by: SidebarReveal.duration / 2)
+                guard sidebar.smokeRevealIsConsistent(progress: 0.5) else {
+                    return revealFailure("sidebar hide midpoint mismatch")
+                }
+                sidebar.smokeUpdateHover(pointer: edgePoint, now: 11.2)
+                sidebar.smokeAdvanceReveal(by: SidebarReveal.duration / 4)
+                guard sidebar.smokeRevealIsConsistent(progress: 0.75) else {
+                    return revealFailure("sidebar did not reverse a hide in progress")
+                }
+                sidebar.smokeUpdateHover(pointer: outsidePoint, now: 12)
+                sidebar.smokeUpdateHover(pointer: outsidePoint, now: 12.13)
+                RunLoop.main.run(until: Date().addingTimeInterval(SidebarReveal.duration * 2))
+                guard sidebar.smokeIsHidden, !sidebar.smokeRevealIsAnimating, sidebar.alphaValue == 1,
+                      edgeFrame(sidebar.frame, in: area, position: position, width: 8) else {
+                    return revealFailure("timer-driven sidebar hide did not finish")
+                }
+            }
+        }
+        sidebar.smokeSetReduceMotion(nil)
+        sidebar.smokeSetAnimatesVisibility(false)
 
         for position in [SidebarPosition.left, .right] {
             for width in [CGFloat(AppSettings.sidebarWidthRange.lowerBound), 188,

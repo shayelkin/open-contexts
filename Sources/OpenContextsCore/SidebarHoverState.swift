@@ -12,6 +12,14 @@ public struct SidebarHoverState: Equatable {
         self.isExpanded = isExpanded
     }
 
+    // Stretches the edge strip along the whole side of the screen. The far end is inclusive because
+    // the pointer can rest exactly on the screen's maximum coordinate.
+    public static func edgeTriggerFrame(edge: CGRect, screen: CGRect, vertical: Bool) -> CGRect {
+        vertical
+            ? CGRect(x: edge.minX, y: screen.minY, width: edge.width, height: screen.height + 1)
+            : CGRect(x: screen.minX, y: edge.minY, width: screen.width + 1, height: edge.height)
+    }
+
     public mutating func setShortcutExpanded(_ expanded: Bool) {
         isShortcutExpanded = expanded
         isExpanded = expanded

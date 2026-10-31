@@ -118,6 +118,59 @@ final class SidebarHoverStateTests: XCTestCase {
         XCTAssertFalse(state.isExpanded)
     }
 
+    func testEdgeTriggerSpansWholeScreenSideWithoutWideningTheStrip() {
+        var generator = SystemRandomNumberGenerator()
+        let screens = [CGRect(x: 0, y: 0, width: 1440, height: 900),
+                       CGRect(x: -1920, y: 200, width: 1920, height: 1080),
+                       CGRect(x: 1440, y: -400, width: 1080, height: 1920)]
+        for _ in 0..<1000 {
+            let screen = screens.randomElement(using: &generator)!
+            let vertical = Bool.random(using: &generator)
+            let length = CGFloat.random(in: 52...(vertical ? screen.height : screen.width), using: &generator)
+            let offset = CGFloat.random(in: 0...((vertical ? screen.height : screen.width) - length), using: &generator)
+            let edge = vertical
+                ? CGRect(x: Bool.random(using: &generator) ? screen.minX : screen.maxX - 8,
+                         y: screen.minY + offset, width: 8, height: length)
+                : CGRect(x: screen.minX + offset, y: screen.minY, width: length, height: 8)
+            let trigger = SidebarHoverState.edgeTriggerFrame(edge: edge, screen: screen, vertical: vertical)
+            XCTAssertTrue(trigger.contains(edge))
+            let along = CGFloat.random(in: 0...1, using: &generator)
+            let across = CGFloat.random(in: 0..<1, using: &generator)
+            let inside = vertical
+                ? CGPoint(x: edge.minX + edge.width * across, y: screen.minY + screen.height * along)
+                : CGPoint(x: screen.minX + screen.width * along, y: edge.minY + edge.height * across)
+            XCTAssertTrue(trigger.contains(inside), "\(inside) not in \(trigger)")
+            let distance = CGFloat.random(in: 0...400, using: &generator)
+            let besides = vertical
+                ? [CGPoint(x: edge.minX - 0.01 - distance, y: inside.y), CGPoint(x: edge.maxX + distance, y: inside.y)]
+                : [CGPoint(x: inside.x, y: edge.minY - 0.01 - distance), CGPoint(x: inside.x, y: edge.maxY + distance)]
+            besides.forEach { XCTAssertFalse(trigger.contains($0), "\($0) in \(trigger)") }
+            let beyond = CGFloat.random(in: 1...400, using: &generator)
+            let pastEnds = vertical
+                ? [CGPoint(x: inside.x, y: screen.minY - beyond), CGPoint(x: inside.x, y: screen.maxY + beyond)]
+                : [CGPoint(x: screen.minX - beyond, y: inside.y), CGPoint(x: screen.maxX + beyond, y: inside.y)]
+            pastEnds.forEach { XCTAssertFalse(trigger.contains($0), "\($0) in \(trigger)") }
+        }
+    }
+
+    func testPointerAnywhereAlongTheSideExpandsAndKeepsExpanded() {
+        let screen = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        let trigger = SidebarHoverState.edgeTriggerFrame(edge: edge, screen: screen, vertical: true)
+        for y in stride(from: screen.minY, through: screen.maxY, by: 25) {
+            var state = SidebarHoverState()
+            XCTAssertTrue(state.update(pointer: CGPoint(x: 999, y: y), edgeFrame: trigger,
+                                       expandedFrame: expanded, dragging: false, now: 0))
+            XCTAssertFalse(state.update(pointer: CGPoint(x: 999, y: y), edgeFrame: trigger,
+                                        expandedFrame: expanded, dragging: false, now: 5))
+            XCTAssertTrue(state.isExpanded)
+            XCTAssertFalse(state.update(pointer: CGPoint(x: 700, y: y), edgeFrame: trigger,
+                                        expandedFrame: expanded, dragging: false, now: 6))
+            XCTAssertTrue(state.update(pointer: CGPoint(x: 700, y: y), edgeFrame: trigger,
+                                       expandedFrame: expanded, dragging: false, now: 6.12))
+            XCTAssertFalse(state.isExpanded)
+        }
+    }
+
     func testContextMenuKeepsExpandedAndRestartsCollapseDelayAfterClosing() {
         var state = SidebarHoverState(isExpanded: true)
         let outside = CGPoint(x: 700, y: 400)

@@ -545,7 +545,9 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
     private func updateHover(pointer: CGPoint, now: TimeInterval) {
         guard enabled || isShortcutExpanded, hasVisibleContent else { return }
         let frames = sidebarFrames()
-        if hoverState.update(pointer: pointer, edgeFrame: frames.edge, expandedFrame: frames.expanded,
+        let trigger = SidebarHoverState.edgeTriggerFrame(edge: frames.edge, screen: displayScreen.frame,
+                                                         vertical: position != .bottom)
+        if hoverState.update(pointer: pointer, edgeFrame: trigger, expandedFrame: frames.expanded,
                              dragging: dragging, menuOpen: contextMenuOpen, now: now) {
             layoutPanel()
         }
@@ -2525,6 +2527,30 @@ enum PanelSmokeCheck {
                   sidebar.smokeIsHidden else {
                 sidebar.close()
                 return fail("sidebar did not collapse after drag: \(sidebar.smokeLayoutDescription)")
+            }
+
+            let screenSide = screen.frame
+            let farSidePoints = position == .bottom
+                ? [CGPoint(x: screenSide.minX, y: frames.edge.midY), CGPoint(x: screenSide.maxX, y: frames.edge.midY)]
+                : [CGPoint(x: frames.edge.midX, y: screenSide.minY), CGPoint(x: frames.edge.midX, y: screenSide.maxY)]
+            for (index, farPoint) in farSidePoints.enumerated() {
+                let start = 0.7 + Double(index)
+                guard !frames.expanded.contains(farPoint) else {
+                    sidebar.close()
+                    return fail("far side point \(farPoint) is inside the panel \(frames.expanded)")
+                }
+                sidebar.smokeUpdateHover(pointer: farPoint, now: start)
+                guard edgeFrame(sidebar.frame, in: area, position: position, width: expandedCrossSize),
+                      !sidebar.smokeIsHidden else {
+                    sidebar.close()
+                    return fail("sidebar did not open from far side \(farPoint): \(sidebar.smokeLayoutDescription)")
+                }
+                sidebar.smokeUpdateHover(pointer: outsidePoint, now: start + 0.1)
+                sidebar.smokeUpdateHover(pointer: outsidePoint, now: start + 0.23)
+                guard sidebar.smokeIsHidden else {
+                    sidebar.close()
+                    return fail("sidebar did not collapse after far side hover: \(sidebar.smokeLayoutDescription)")
+                }
             }
 
             sidebar.update(groups: groups, windowsByGroup: [GroupStore.ungroupedID: [windows[0]]],

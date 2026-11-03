@@ -124,7 +124,6 @@ jobs:
           SIGNING_MODE="$SIGNING_MODE" \
           CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY" \
             ./scripts/build-app.sh release
-          "$APP_PATH/Contents/MacOS/OpenContexts" --self-check
           ./scripts/build-dmg.sh
           echo "DMG_PATH=dist/OpenContexts-${APP_VERSION}-universal.dmg" >> "$GITHUB_ENV"
 

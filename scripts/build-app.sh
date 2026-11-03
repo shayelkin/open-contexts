@@ -158,8 +158,8 @@ else
     cp "$built_binary" "$app/Contents/MacOS/OpenContexts"
     strip_nonportable_rpaths "$app/Contents/MacOS/OpenContexts"
 fi
-ditto "$resource_source_dir/OpenContexts_OpenContexts.bundle" \
-    "$app/Contents/Resources/OpenContexts_OpenContexts.bundle"
+ditto "$resource_source_dir/OpenContexts_OpenContextsApp.bundle" \
+    "$app/Contents/Resources/OpenContexts_OpenContextsApp.bundle"
 
 sparkle_framework="$PWD/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
 if [[ ! -d "$sparkle_framework" ]]; then
@@ -208,7 +208,6 @@ else
     codesign --force --sign "$signing_identity" "$app"
 fi
 codesign --verify --strict "$app"
-"$app/Contents/MacOS/OpenContexts" --self-check
 if [[ "$signing_mode" == self-signed ]]; then
     designated_requirement="$(codesign -dr - "$app" 2>&1)"
     if [[ "$designated_requirement" != *'designated =>'* || "$designated_requirement" == *cdhash* ]]; then

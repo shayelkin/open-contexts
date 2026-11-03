@@ -9,12 +9,17 @@ let package = Package(
     dependencies: [.package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0")],
     targets: [
         .target(name: "OpenContextsCore"),
+        .target(
+            name: "OpenContextsApp",
+            dependencies: ["OpenContextsCore", .product(name: "Sparkle", package: "Sparkle")],
+            resources: [.process("Resources")]
+        ),
         .executableTarget(
             name: "OpenContexts",
-            dependencies: ["OpenContextsCore", .product(name: "Sparkle", package: "Sparkle")],
-            resources: [.process("Resources")],
+            dependencies: ["OpenContextsApp"],
             linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
         ),
-        .testTarget(name: "OpenContextsCoreTests", dependencies: ["OpenContextsCore"])
+        .testTarget(name: "OpenContextsCoreTests", dependencies: ["OpenContextsCore"]),
+        .testTarget(name: "OpenContextsAppTests", dependencies: ["OpenContextsApp"])
     ]
 )

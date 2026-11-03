@@ -116,12 +116,10 @@ git clone https://github.com/zshnb/open-contexts.git
 cd open-contexts
 swift test
 SIGNING_MODE=adhoc ./scripts/build-app.sh
-dist/OpenContexts.app/Contents/MacOS/OpenContexts --self-check
-dist/OpenContexts.app/Contents/MacOS/OpenContexts --ui-self-check
 open dist/OpenContexts.app
 ```
 
-`--ui-self-check` requires a logged-in graphical session. It briefly creates and closes the sidebar and switcher without requesting Accessibility permission or installing global keyboard shortcuts.
+`swift test` requires a logged-in graphical session: the panel tests briefly create and close the sidebar and switcher. Tests that drive other apps through Accessibility (Dock badges, Spaces, window activation) run only when the terminal running `swift test` is allowed under Privacy & Security › Accessibility, and are skipped otherwise. The activation tests open and quit TextEdit, and are skipped if TextEdit is already running.
 
 By default, `./scripts/build-app.sh` uses the sole Apple Development certificate in your keychain. If you have multiple certificates, set `CODE_SIGN_IDENTITY` to a certificate SHA-1 or full name. A stable development signature can reduce lost Accessibility permissions after rebuilding. Apple Development signing is still different from the Developer ID signing and Apple notarization needed for public distribution.
 

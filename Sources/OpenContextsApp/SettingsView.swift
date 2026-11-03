@@ -215,129 +215,9 @@ final class AppSettings: ObservableObject {
         defaults.removeObject(forKey: "sidebarShortcut")
         defaults.removeObject(forKey: "sidebarShortcutEnabled")
     }
-
-    static func selfCheck() -> Bool {
-        let suite = "OpenContexts.self-check.\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: suite) else { return false }
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let initial = AppSettings(defaults: defaults)
-        guard !initial.showWindowsFromAllDesktops else { return false }
-        initial.setShowWindowsFromAllDesktops(true)
-        guard AppSettings(defaults: defaults).showWindowsFromAllDesktops else { return false }
-        initial.setShowWindowsFromAllDesktops(false)
-        guard !AppSettings(defaults: defaults).showWindowsFromAllDesktops else { return false }
-        guard !initial.showSidebarWindowsFromAllDesktops else { return false }
-        initial.setShowSidebarWindowsFromAllDesktops(true)
-        let sidebarAllDesktops = AppSettings(defaults: defaults)
-        guard sidebarAllDesktops.showSidebarWindowsFromAllDesktops,
-              !sidebarAllDesktops.showWindowsFromAllDesktops else { return false }
-        initial.setShowSidebarWindowsFromAllDesktops(false)
-        guard !AppSettings(defaults: defaults).showSidebarWindowsFromAllDesktops else { return false }
-        guard initial.sidebarMode == .always, initial.sidebarVerticalAlignment == .center,
-              initial.showUngrouped, initial.showUngroupedTitle, initial.showCreateGroup,
-              initial.sidebarWidth == Self.defaultSidebarWidth else { return false }
-        for width in [Self.sidebarWidthRange.lowerBound, Self.defaultSidebarWidth, Self.sidebarWidthRange.upperBound] {
-            initial.setSidebarWidth(width)
-            guard AppSettings(defaults: defaults).sidebarWidth == width else { return false }
-        }
-        initial.setSidebarWidth(1000)
-        guard initial.sidebarWidth == Self.sidebarWidthRange.upperBound else { return false }
-        initial.setSidebarWidth(.nan)
-        guard initial.sidebarWidth == Self.sidebarWidthRange.upperBound else { return false }
-        initial.setSidebarWidth(Self.defaultSidebarWidth)
-        guard initial.sidebarWidth == Self.defaultSidebarWidth,
-              AppSettings(defaults: defaults).sidebarWidth == Self.defaultSidebarWidth else { return false }
-        defaults.set(-1.0, forKey: "sidebarWidth")
-        guard AppSettings(defaults: defaults).sidebarWidth == Self.sidebarWidthRange.lowerBound else { return false }
-        defaults.set(Double.infinity, forKey: "sidebarWidth")
-        guard AppSettings(defaults: defaults).sidebarWidth == Self.defaultSidebarWidth else { return false }
-        defaults.set("invalid", forKey: "sidebarWidth")
-        guard AppSettings(defaults: defaults).sidebarWidth == Self.defaultSidebarWidth else { return false }
-        initial.setSidebarMode(.hidden)
-        initial.setSidebarVerticalAlignment(.top)
-        initial.setShowUngrouped(false)
-        initial.setShowCreateGroup(false)
-        let hidden = AppSettings(defaults: defaults)
-        guard hidden.sidebarMode == .hidden, hidden.sidebarVerticalAlignment == .top,
-              !hidden.showUngrouped, hidden.showUngroupedTitle, !hidden.showCreateGroup else { return false }
-        initial.setShowUngroupedTitle(false)
-        guard !AppSettings(defaults: defaults).showUngroupedTitle,
-              !AppSettings(defaults: defaults).showUngrouped else { return false }
-        initial.setShowUngrouped(true)
-        guard AppSettings(defaults: defaults).showUngrouped,
-              !AppSettings(defaults: defaults).showUngroupedTitle else { return false }
-        initial.setShowUngroupedTitle(true)
-        initial.setShowUngrouped(false)
-        guard AppSettings(defaults: defaults).showUngroupedTitle else { return false }
-        initial.setSidebarVerticalAlignment(.bottom)
-        guard AppSettings(defaults: defaults).sidebarVerticalAlignment == .bottom else { return false }
-        defaults.set("invalid", forKey: "sidebarVerticalAlignment")
-        defaults.set("invalid", forKey: "sidebarMode")
-        guard AppSettings(defaults: defaults).sidebarVerticalAlignment == .center,
-              AppSettings(defaults: defaults).sidebarMode == .always else { return false }
-        defaults.set(16, forKey: "allWindowsKeyCode")
-        defaults.set(17, forKey: "currentAppKeyCode")
-        defaults.set("top", forKey: "sidebarPosition")
-        let migratedTop = AppSettings(defaults: defaults)
-        guard migratedTop.sidebarPosition == .right,
-              defaults.string(forKey: "sidebarPosition") == SidebarPosition.right.rawValue else { return false }
-        defaults.set("bottom", forKey: "sidebarPosition")
-        defaults.set("icon", forKey: "sidebarItemDisplayMode")
-        let bottom = AppSettings(defaults: defaults)
-        guard bottom.sidebarPosition == .bottom,
-              bottom.sidebarItemDisplayMode == .icon,
-              defaults.string(forKey: "sidebarPosition") == SidebarPosition.bottom.rawValue else { return false }
-        defaults.set("left", forKey: "sidebarPosition")
-        let settings = AppSettings(defaults: defaults)
-        settings.setLanguage(.ja)
-        guard AppSettings(defaults: defaults).language == .ja,
-              defaults.string(forKey: "language") == "ja" else { return false }
-        defaults.set("unsupported", forKey: "language")
-        guard AppSettings(defaults: defaults).language == .system else { return false }
-        let custom = KeyboardShortcut(keyCode: 16, modifiers: [.maskControl, .maskAlternate], keyLabel: "Y")
-        guard settings.sidebarShortcut == .sidebar,
-              !settings.setShortcut(.sidebar, target: .allWindows),
-              !settings.setShortcut(.allWindows, target: .sidebar),
-              settings.setShortcut(custom, target: .sidebar),
-              AppSettings(defaults: defaults).sidebarShortcut == custom,
-              !settings.setShortcut(custom, target: .currentApp) else { return false }
-        settings.disableSidebarShortcut()
-        guard settings.sidebarShortcut == nil,
-              AppSettings(defaults: defaults).sidebarShortcut == nil else { return false }
-        guard settings.setShortcut(.sidebar, target: .sidebar),
-              AppSettings(defaults: defaults).sidebarShortcut == .sidebar else { return false }
-        defaults.set(Data("invalid".utf8), forKey: "sidebarShortcut")
-        guard AppSettings(defaults: defaults).sidebarShortcut == .sidebar else { return false }
-        // Preserve an existing window shortcut that already uses the new sidebar default.
-        defaults.set(try? JSONEncoder().encode(KeyboardShortcut.sidebar), forKey: "allWindowsShortcut")
-        guard AppSettings(defaults: defaults).allWindowsShortcut == .sidebar,
-              AppSettings(defaults: defaults).sidebarShortcut == nil else { return false }
-        defaults.removeObject(forKey: "allWindowsShortcut")
-        guard settings.allWindowsShortcut == .allWindows, settings.currentAppShortcut == .currentApp,
-              !settings.setShortcut(.currentApp, target: .allWindows),
-              settings.setShortcut(custom, target: .allWindows),
-              AppSettings(defaults: defaults).allWindowsShortcut == custom,
-              !settings.setShortcut(custom, target: .currentApp),
-              settings.setShortcut(KeyboardShortcut(keyCode: 16, modifiers: .maskCommand, keyLabel: "Y"),
-                                   target: .currentApp),
-              AppSettings(defaults: defaults).currentAppShortcut.keyCode == 16 else { return false }
-        // Corrupt or conflicting saved values fall back to the original shortcuts.
-        defaults.set(try? JSONEncoder().encode(custom), forKey: "currentAppShortcut")
-        guard AppSettings(defaults: defaults).allWindowsShortcut == .allWindows,
-              AppSettings(defaults: defaults).currentAppShortcut == .currentApp else { return false }
-        defaults.set(Data("invalid".utf8), forKey: "allWindowsShortcut")
-        guard AppSettings(defaults: defaults).allWindowsShortcut == .allWindows else { return false }
-        settings.resetShortcuts()
-        return AppSettings(defaults: defaults).allWindowsShortcut == .allWindows
-            && AppSettings(defaults: defaults).currentAppShortcut == .currentApp
-            && AppSettings(defaults: defaults).sidebarShortcut == .sidebar
-            && settings.sidebarPosition == .left
-            && settings.sidebarItemDisplayMode == .icon
-            && defaults.string(forKey: "sidebarPosition") == SidebarPosition.left.rawValue
-    }
 }
 
-private enum SettingsPage: String, CaseIterable, Identifiable {
+enum SettingsPage: String, CaseIterable, Identifiable {
     case general = "General"
     case sidebar = "Sidebar"
     case shortcuts = "Shortcuts"
@@ -357,7 +237,7 @@ struct SettingsView: View {
     @ObservedObject var windowService: WindowService
     @ObservedObject var groupStore: GroupStore
     @ObservedObject var shortcuts: ShortcutController
-    @State private var page: SettingsPage = .general
+    @State var page: SettingsPage = .general
 
     private var language: AppLanguage { settings.language }
 
@@ -607,39 +487,6 @@ struct SettingsView: View {
         .accessibilityLabel(L10n.text(target.title, language: language))
         .accessibilityValue(recording ? L10n.text("Press shortcut…", language: language) : display)
     }
-
-    @MainActor
-    static func selfCheck() -> Bool {
-        let suite = "OpenContexts.settings-layout-check.\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: suite) else { return false }
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let settings = AppSettings(defaults: defaults)
-        let service = WindowService()
-        let groups = GroupStore(fileURL: FileManager.default.temporaryDirectory
-            .appendingPathComponent("\(suite).json"))
-        let shortcuts = ShortcutController()
-        func sliders(in view: NSView) -> [NSSlider] {
-            (view as? NSSlider).map { [$0] } ?? view.subviews.flatMap { sliders(in: $0) }
-        }
-        for page in SettingsPage.allCases {
-            for position in SidebarPosition.allCases {
-                settings.setSidebarPosition(position)
-                var view = Self(settings: settings, windowService: service, groupStore: groups, shortcuts: shortcuts)
-                view._page = State(initialValue: page)
-                let host = NSHostingView(rootView: view)
-                host.frame = NSRect(x: 0, y: 0, width: 840, height: 600)
-                host.layoutSubtreeIfNeeded()
-                let controls = sliders(in: host)
-                let showsWidth = page == .sidebar && position != .bottom
-                guard controls.count == (showsWidth ? 1 : 0) else { return false }
-                if let slider = controls.first {
-                    guard slider.doubleValue == AppSettings.defaultSidebarWidth,
-                          slider.frame.width > 100 else { return false }
-                }
-            }
-        }
-        return true
-    }
 }
 
 struct SidebarWidthSlider: NSViewRepresentable {
@@ -650,7 +497,7 @@ struct SidebarWidthSlider: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSSlider { makeControl(coordinator: context.coordinator) }
 
-    private func makeControl(coordinator: Coordinator) -> NSSlider {
+    func makeControl(coordinator: Coordinator) -> NSSlider {
         let slider = NSSlider(frame: .zero)
         slider.cell = WidthSliderCell()
         slider.minValue = AppSettings.sidebarWidthRange.lowerBound
@@ -699,39 +546,5 @@ struct SidebarWidthSlider: NSViewRepresentable {
             knob.lineWidth = 2
             knob.stroke()
         }
-    }
-
-    static func selfCheck() -> Bool {
-        var width = AppSettings.defaultSidebarWidth
-        let view = Self(value: Binding(get: { width }, set: { width = $0 }), language: .zh)
-        let coordinator = view.makeCoordinator()
-        let slider = view.makeControl(coordinator: coordinator)
-        guard slider.isContinuous, slider.numberOfTickMarks == 0,
-              slider.accessibilityLabel() == "侧边栏宽度" else { return false }
-        for value in [94.0, 188.4, 376.0] {
-            slider.doubleValue = value
-            guard slider.sendAction(slider.action, to: slider.target), width == value.rounded() else { return false }
-        }
-        slider.doubleValue = AppSettings.defaultSidebarWidth
-        slider.appearance = NSAppearance(named: .aqua)
-        for height in [20.0, 28.0] {
-            slider.frame = NSRect(x: 0, y: 0, width: 400, height: height)
-            guard let bitmap = slider.bitmapImageRepForCachingDisplay(in: slider.bounds),
-                  let cell = slider.cell as? NSSliderCell else { return false }
-            slider.cacheDisplay(in: slider.bounds, to: bitmap)
-            let scale = CGFloat(bitmap.pixelsWide) / slider.bounds.width
-            func blueCenter(at x: CGFloat) -> Double? {
-                let rows = (0..<bitmap.pixelsHigh).filter { y in
-                    guard let color = bitmap.colorAt(x: Int(x * scale), y: y)?.usingColorSpace(.sRGB) else { return false }
-                    return color.blueComponent > 0.8 && color.redComponent < 0.5 && color.greenComponent < 0.75
-                }
-                guard let first = rows.first, let last = rows.last else { return nil }
-                return Double(first + last) / 2
-            }
-            guard let trackCenter = blueCenter(at: 30),
-                  let knobCenter = blueCenter(at: cell.knobRect(flipped: slider.isFlipped).midX),
-                  abs(trackCenter - knobCenter) <= 1 else { return false }
-        }
-        return true
     }
 }

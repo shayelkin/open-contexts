@@ -101,6 +101,15 @@ final class SwitcherPanelTests: XCTestCase {
         XCTAssertEqual(switcher.smokeHighlightedIndices, [initialIndex])
     }
 
+    func testSwitcherFollowsTheSystemAppearance() throws {
+        let content = try XCTUnwrap(switcher.contentView)
+        XCTAssertNil(content.appearance, "the switcher forces an appearance")
+        for name in [NSAppearance.Name.darkAqua, .aqua] {
+            switcher.appearance = NSAppearance(named: name)
+            XCTAssertEqual(content.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]), name)
+        }
+    }
+
     func testSearchHighlightingKeepsLongTextLayout() {
         let windows = [
             WindowInfo(id: "long-title", appID: "chrome", appName: "Google Chrome",

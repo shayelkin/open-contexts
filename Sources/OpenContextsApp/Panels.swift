@@ -1076,7 +1076,6 @@ final class SwitcherPanel: NSPanel {
         background.material = .popover
         background.blendingMode = .behindWindow
         background.state = .active
-        background.appearance = NSAppearance(named: .aqua)
         background.wantsLayer = true
         background.layer?.cornerRadius = 10
         background.layer?.masksToBounds = true

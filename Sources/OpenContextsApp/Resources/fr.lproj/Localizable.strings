@@ -74,3 +74,6 @@
 "Current" = "Actuel";
 "Current desktop" = "Bureau actuel";
 "Desktops" = "Bureaux";
+"Quit %@?" = "Quitter %@ ?";
+"Delete the group “%@”?" = "Supprimer le groupe « %@ » ?";
+"Its windows move to Ungrouped." = "Ses fenêtres seront déplacées dans Sans groupe.";

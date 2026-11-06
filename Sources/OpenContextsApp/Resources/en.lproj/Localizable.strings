@@ -74,3 +74,6 @@
 "Current" = "Current";
 "Current desktop" = "Current desktop";
 "Desktops" = "Desktops";
+"Quit %@?" = "Quit %@?";
+"Delete the group “%@”?" = "Delete the group “%@”?";
+"Its windows move to Ungrouped." = "Its windows move to Ungrouped.";

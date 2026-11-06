@@ -875,4 +875,74 @@ final class SidebarPanelTests: XCTestCase {
             XCTAssertEqual(events, ["activate", "prompt"] + (expected.isEmpty ? [] : ["restore"]))
         }
     }
+
+    private func menuItem(_ title: String, in menu: NSMenu) throws -> NSMenuItem {
+        try XCTUnwrap(menu.items.first { $0.title == L10n.text(title, language: .en) }, title)
+    }
+
+    private func perform(_ item: NSMenuItem) {
+        _ = (item.target as AnyObject).perform(item.action, with: item)
+    }
+
+    func testQuittingAnotherAppAsksFirstAndOwnWindowsOfferNoQuit() throws {
+        let dock = try XCTUnwrap(NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.dock").first)
+        let foreign = WindowInfo(id: "foreign", appID: "com.apple.dock", appName: "Dock", title: "Dock window",
+                                 processID: dock.processIdentifier)
+        sidebar.update(groups: groups, windowsByGroup: [GroupStore.ungroupedID: [foreign, windows[0]]],
+                       alwaysVisible: true, fullscreen: false, language: .en)
+        let rows = sidebar.sidebarRows.filter { if case .window = $0.style { return true }; return false }
+        let foreignMenu = try XCTUnwrap(rows.first?.menu)
+        let ownMenu = try XCTUnwrap(rows.last?.menu)
+        sidebar.menuNeedsUpdate(foreignMenu)
+        sidebar.menuNeedsUpdate(ownMenu)
+        XCTAssertFalse(ownMenu.items.contains { ["Hide App", "Quit App"].contains($0.title) },
+                       "OpenContexts offered to hide or quit itself")
+
+        var prompts: [(String, String?, String)] = []
+        var answer = false
+        var terminated: [pid_t] = []
+        sidebar.confirmDestructiveAction = { prompts.append(($0, $1, $2)); return answer }
+        sidebar.terminateApplication = { terminated.append($0.processIdentifier) }
+        let quit = try menuItem("Quit App", in: foreignMenu)
+        perform(quit)
+        XCTAssertEqual(terminated, [], "an app was quit without confirmation")
+        XCTAssertEqual(prompts.map(\.0), ["Quit Dock?"])
+        XCTAssertEqual(prompts.map(\.2), ["Quit App"])
+        answer = true
+        perform(quit)
+        XCTAssertEqual(terminated, [dock.processIdentifier])
+
+        let selfQuit = NSMenuItem(title: "Quit App", action: quit.action, keyEquivalent: "")
+        selfQuit.target = sidebar
+        selfQuit.representedObject = getpid()
+        perform(selfQuit)
+        XCTAssertEqual(terminated, [dock.processIdentifier], "OpenContexts quit itself from the sidebar")
+    }
+
+    func testDeletingAGroupAsksFirst() throws {
+        var deleted: [String] = []
+        sidebar.close()
+        sidebar = SidebarPanel(screen: screen, onActivate: { _ in }, canCloseWindow: { $1(true) },
+                               onCloseWindow: { _ in }, windowPinPosition: { _ in nil }, onTogglePin: { _ in },
+                               onMoveWindow: { _, _, _, _ in }, onMoveGroup: { _, _ in }, onCreateGroup: { _ in },
+                               onRenameGroup: { _, _ in }, onDeleteGroup: { deleted.append($0) }, onResize: { _ in })
+        sidebar.smokeStopHoverPolling()
+        sidebar.update(groups: dragGroups, windowsByGroup: coordinateWindows, alwaysVisible: true, fullscreen: false,
+                       language: .en)
+        let header = try XCTUnwrap(sidebar.sidebarRows.first {
+            if case .group(let id) = $0.style { return id == firstGroupID }
+            return false
+        })
+        let delete = try menuItem("Delete Group", in: try XCTUnwrap(header.menu))
+        var prompts: [(String, String?, String)] = []
+        var answer = false
+        sidebar.confirmDestructiveAction = { prompts.append(($0, $1, $2)); return answer }
+        perform(delete)
+        XCTAssertEqual(deleted, [], "a group was deleted without confirmation")
+        XCTAssertEqual(prompts.map(\.0), ["Delete the group “Group 1”?"])
+        XCTAssertEqual(prompts.map(\.1), ["Its windows move to Ungrouped."])
+        answer = true
+        perform(delete)
+        XCTAssertEqual(deleted, [firstGroupID])
+    }
 }

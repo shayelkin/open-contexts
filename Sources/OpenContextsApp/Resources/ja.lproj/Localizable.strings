@@ -74,3 +74,6 @@
 "Current" = "現在";
 "Current desktop" = "現在のデスクトップ";
 "Desktops" = "デスクトップ";
+"Quit %@?" = "%@ を終了しますか？";
+"Delete the group “%@”?" = "グループ「%@」を削除しますか？";
+"Its windows move to Ungrouped." = "ウインドウは未分類に移動します。";

@@ -66,6 +66,9 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
     private(set) var previewDrop: SidebarDrop?
     var animatesVisibility = true
     var reduceMotion: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+    /// Replaces the confirmation alert, e.g. in tests: (message, detail, action title) -> confirmed.
+    var confirmDestructiveAction: ((String, String?, String) -> Bool)?
+    var terminateApplication: (NSRunningApplication) -> Void = { _ = $0.terminate() }
     private(set) var revealProgress: Double = 0
     private(set) var revealTarget: Double = 0
     private(set) var revealTimer: Timer?
@@ -408,7 +411,8 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
             item.representedObject = window.id
             menu.addItem(item)
         }
-        guard NSRunningApplication(processIdentifier: processID) != nil else { return }
+        // Hiding or quitting OpenContexts itself from its own sidebar would only make the sidebar disappear.
+        guard processID != getpid(), NSRunningApplication(processIdentifier: processID) != nil else { return }
         if !windows.isEmpty { menu.addItem(.separator()) }
         for (title, action) in [(L10n.text("Hide App", language: language), #selector(hideMenuApplication(_:))),
                                 (L10n.text("Quit App", language: language), #selector(terminateMenuApplication(_:)))] {
@@ -444,8 +448,12 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
     }
 
     @objc private func terminateMenuApplication(_ sender: NSMenuItem) {
-        guard let processID = sender.representedObject as? Int32 else { return }
-        NSRunningApplication(processIdentifier: processID)?.terminate()
+        guard let processID = sender.representedObject as? Int32, processID != getpid(),
+              let application = NSRunningApplication(processIdentifier: processID) else { return }
+        let name = application.localizedName ?? application.bundleIdentifier ?? String(processID)
+        guard confirm(L10n.format("Quit %@?", name, language: language), detail: nil,
+                      action: L10n.text("Quit App", language: language)) else { return }
+        terminateApplication(application)
     }
 
     func updateBadges(_ badges: [String: String]) {
@@ -1021,8 +1029,23 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
     }
 
     @objc private func deleteGroup(_ sender: NSMenuItem) {
-        guard let id = sender.representedObject as? String else { return }
+        guard let id = sender.representedObject as? String,
+              let group = renderedGroups.first(where: { $0.id == id }) else { return }
+        guard confirm(L10n.format("Delete the group “%@”?", group.name, language: language),
+                      detail: L10n.text("Its windows move to Ungrouped.", language: language),
+                      action: L10n.text("Delete Group", language: language)) else { return }
         onDeleteGroup(id)
+    }
+
+    private func confirm(_ message: String, detail: String?, action: String) -> Bool {
+        if let confirmDestructiveAction { return confirmDestructiveAction(message, detail, action) }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = message
+        alert.informativeText = detail ?? ""
+        alert.addButton(withTitle: action).hasDestructiveAction = true
+        alert.addButton(withTitle: L10n.text("Cancel", language: language))
+        return withAppActivated { alert.runModal() } == .alertFirstButtonReturn
     }
 
     private func requestName(title: String, value: String, completion: (String) -> Void) {

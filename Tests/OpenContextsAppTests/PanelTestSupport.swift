@@ -18,6 +18,9 @@ extension SidebarPanel {
             menuNeedsUpdate(menu)
             var closable: Bool?
             canCloseWindow(menu.title) { closable = $0 }
+            // The smoke windows belong to the test process, which must not offer to hide or quit itself.
+            let appActions = [L10n.text("Hide App", language: language), L10n.text("Quit App", language: language)]
+            let offersAppActions = menu.items.contains { appActions.contains($0.title) }
             return menu.items.first?.title == L10n.text("Pin", language: language)
                 && menu.items.first?.representedObject as? String == menu.title
                 && menu.items.first?.state == (windowPinPosition(menu.title) != nil ? .on : .off)
@@ -28,8 +31,7 @@ extension SidebarPanel {
                 && menu.items[1].isEnabled == closable
                 && Array(menu.items.dropFirst(3).prefix(windowIDs.count))
                     .compactMap { $0.representedObject as? String } == windowIDs
-                && menu.items.suffix(2).map(\.title) == [L10n.text("Hide App", language: language),
-                                                        L10n.text("Quit App", language: language)]
+                && !offersAppActions
         }
     }
 

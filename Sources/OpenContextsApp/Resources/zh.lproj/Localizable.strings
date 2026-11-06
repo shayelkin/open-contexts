@@ -74,3 +74,6 @@
 "Current" = "当前";
 "Current desktop" = "当前桌面";
 "Desktops" = "桌面";
+"Quit %@?" = "要退出 %@ 吗？";
+"Delete the group “%@”?" = "要删除分组“%@”吗？";
+"Its windows move to Ungrouped." = "其中的窗口将移至未分组。";

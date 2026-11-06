@@ -74,3 +74,6 @@
 "Current" = "Actual";
 "Current desktop" = "Escritorio actual";
 "Desktops" = "Escritorios";
+"Quit %@?" = "¿Salir de %@?";
+"Delete the group “%@”?" = "¿Eliminar el grupo «%@»?";
+"Its windows move to Ungrouped." = "Sus ventanas pasarán a Sin grupo.";

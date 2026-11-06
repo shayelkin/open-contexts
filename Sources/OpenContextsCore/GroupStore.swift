@@ -481,8 +481,10 @@ public final class GroupStore: ObservableObject {
     }
 
     private func positionDraggedWindow(savedID: String, in groupID: String, requested: Int) {
-        guard let index = windowsByGroup[groupID]?.firstIndex(where: { $0.id == savedID }) else { return }
-        let moved = windowsByGroup[groupID]![index]
+        guard let records = windowsByGroup[groupID], let index = records.firstIndex(where: { $0.id == savedID }) else {
+            return
+        }
+        let moved = records[index]
         let key = WindowKey(appID: moved.appID, title: moved.title)
         guard moved.pinnedPosition != nil || windowsByGroup[groupID, default: []].contains(where: {
             $0.id != savedID && $0.appID == key.appID && $0.title == key.title && $0.pinnedPosition != nil

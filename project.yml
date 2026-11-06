@@ -30,7 +30,7 @@ targets:
       base:
         PRODUCT_NAME: OtherContexts
         PRODUCT_BUNDLE_IDENTIFIER: com.shayelkin.opencontexts
-        MARKETING_VERSION: "0.6"
+        MARKETING_VERSION: "0.6.0"
         CURRENT_PROJECT_VERSION: 1
         CODE_SIGN_STYLE: Manual
         CODE_SIGN_IDENTITY: "-"

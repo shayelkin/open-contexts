@@ -1,0 +1,93 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        run: xcodegen generate
+
+      - name: Resolve version
+        run: |
+          set -euo pipefail
+          version="$(xcodebuild \
+            -project OpenContexts.xcodeproj \
+            -scheme OpenContexts \
+            -configuration Release \
+            -showBuildSettings -json \
+            | jq -r '.[0].buildSettings.MARKETING_VERSION // empty')"
+          [[ -n "$version" ]] || { echo "MARKETING_VERSION is not set" >&2; exit 1; }
+          tag="v$version"
+          git check-ref-format "refs/tags/$tag" || {
+            echo "'$tag' is not a valid git tag name" >&2
+            exit 1
+          }
+          if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then
+            echo "Tag $tag already exists; bump MARKETING_VERSION in project.yml" >&2
+            exit 1
+          fi
+          echo "APP_VERSION=$version" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
+
+      - name: Run tests
+        run: swift test
+
+      - name: Build app
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project OpenContexts.xcodeproj \
+            -scheme OpenContexts \
+            -configuration Release \
+            -derivedDataPath build \
+            ARCHS="arm64 x86_64" \
+            ONLY_ACTIVE_ARCH=NO \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
+            build
+
+      - name: Package app
+        run: |
+          set -euo pipefail
+          app="build/Build/Products/Release/OtherContexts.app"
+          codesign --verify --strict --verbose=2 "$app"
+          [[ "$(plutil -extract CFBundleShortVersionString raw -o - "$app/Contents/Info.plist")" == "$APP_VERSION" ]]
+          mkdir -p dist
+          zip_name="OtherContexts-${APP_VERSION//\//-}-universal.zip"
+          ditto -c -k --sequesterRsrc --keepParent "$app" "dist/$zip_name"
+          (cd dist && shasum -a 256 "$zip_name" > SHA256SUMS.txt)
+          echo "ZIP_PATH=dist/$zip_name" >> "$GITHUB_ENV"
+
+      - name: Tag and publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "OtherContexts $APP_VERSION" \
+            --generate-notes \
+            "$ZIP_PATH" dist/SHA256SUMS.txt

@@ -17,10 +17,10 @@ public final class GroupStore: ObservableObject {
 
     @Published public private(set) var groups: [WindowGroup]
     @Published public private(set) var revision = 0
-    public private(set) var persistenceErrorOperation: PersistenceErrorOperation?
-    public private(set) var persistenceErrorDetail: String?
+    @Published public private(set) var persistenceErrorOperation: PersistenceErrorOperation?
+    @Published public private(set) var persistenceErrorDetail: String?
     /// Where an unreadable groups file was moved so that a fresh one could be written.
-    public private(set) var persistenceBackupURL: URL?
+    @Published public private(set) var persistenceBackupURL: URL?
     /// Saved windows whose live title or document changed since the last write; see `flushPendingChanges()`.
     public private(set) var hasPendingChanges = false
 

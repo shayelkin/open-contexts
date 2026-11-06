@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import XCTest
 @testable import OpenContextsCore
@@ -287,6 +288,27 @@ final class GroupStoreTests: XCTestCase {
         XCTAssertEqual(GroupStore(fileURL: fileURL).groups.map(\.name).last, "Fresh", "changes after recovery were lost")
         XCTAssertEqual(store.persistenceErrorOperation, .read, "a later save hid the read error")
         XCTAssertNotNil(store.persistenceErrorDetail)
+    }
+
+    func testSaveFailuresArePublishedAndClearedByTheNextSuccessfulSave() throws {
+        let blocker = temporaryFileURL().deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: blocker.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("a file where the directory should be".utf8).write(to: blocker)
+        let store = GroupStore(fileURL: blocker.appendingPathComponent("groups.json"))
+        var operations: [GroupStore.PersistenceErrorOperation?] = []
+        let subscription = store.$persistenceErrorOperation.dropFirst().sink { operations.append($0) }
+        defer { subscription.cancel() }
+
+        store.createGroup(name: "Unsaved")
+        XCTAssertEqual(operations, [.write], "a save failure was not published")
+        XCTAssertFalse(store.persistenceErrorDetail?.isEmpty ?? true)
+
+        try FileManager.default.removeItem(at: blocker)
+        store.createGroup(name: "Saved")
+        XCTAssertEqual(operations, [.write, nil], "a successful save did not clear the error")
+        XCTAssertNil(store.persistenceErrorDetail)
+        XCTAssertEqual(GroupStore(fileURL: blocker.appendingPathComponent("groups.json")).groups.map(\.name),
+                       ["Ungrouped", "Unsaved", "Saved"])
     }
 
     func testUngroupedNameIsNeutralAndAnyStoredNameLoads() throws {

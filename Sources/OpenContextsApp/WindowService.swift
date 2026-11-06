@@ -391,7 +391,8 @@ final class WindowService: ObservableObject {
             !knownIDs.contains(id) && topology?.space(for: id)?.isCurrent == false ? pid : nil
         } ?? [])
         let pendingPIDs = applications.map(\.processID).filter { missingOwners.contains($0) }
-        let discoveryPID = allSpaces && !pendingPIDs.isEmpty ? pendingPIDs[discoveryPass % pendingPIDs.count] : nil
+        let discoveryPID = allSpaces && !pendingPIDs.isEmpty
+            ? pendingPIDs[discoveryIndex(pass: discoveryPass, count: pendingPIDs.count)] : nil
 
         for application in applications {
             let appElement = AXUIElementCreateApplication(application.processID)
@@ -587,6 +588,11 @@ final class WindowService: ObservableObject {
             spaceSnapshot: topology,
             pendingTabs: deferredTabs
         )
+    }
+
+    /// Round-robin index for `pass`, valid for every `pass` including negative ones after `&+=` wraps.
+    nonisolated static func discoveryIndex(pass: Int, count: Int) -> Int {
+        Int(UInt(bitPattern: pass) % UInt(count))
     }
 
     /// Picks the ID for a window the previous scan did not track.

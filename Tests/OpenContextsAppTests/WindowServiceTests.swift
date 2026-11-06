@@ -175,6 +175,20 @@ final class WindowServiceTests: XCTestCase {
         assertFresh(resolve(empty, previous: [tab("empty", element: 9009, frame: empty)]), "empty frame")
     }
 
+    func testDiscoveryIndexStaysInRangeForEveryPass() {
+        var random = SystemRandomNumberGenerator()
+        let edges = [Int.min, Int.min + 1, -1, 0, 1, Int.max - 1, Int.max]
+        for pass in edges + (0..<5_000).map({ _ in Int.random(in: Int.min...Int.max, using: &random) }) {
+            for count in 1...7 {
+                XCTAssertTrue((0..<count).contains(WindowService.discoveryIndex(pass: pass, count: count)),
+                              "pass \(pass), count \(count)")
+            }
+        }
+        XCTAssertEqual((0..<6).map { WindowService.discoveryIndex(pass: $0, count: 3) }, [0, 1, 2, 0, 1, 2])
+        XCTAssertEqual(WindowService.discoveryIndex(pass: Int.max &+ 1, count: 3),
+                       WindowService.discoveryIndex(pass: Int.min, count: 3))
+    }
+
     func testPrivateAPIResultsAreTypeChecked() {
         XCTAssertNil(WindowSpaces.array(nil))
         XCTAssertNil(WindowSpaces.array(Unmanaged.passRetained("text" as CFString)))

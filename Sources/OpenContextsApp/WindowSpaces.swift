@@ -23,11 +23,11 @@ enum WindowSpaces {
 
     private struct API {
         let connection: @convention(c) () -> Int32
-        let displays: @convention(c) (Int32) -> Unmanaged<CFArray>?
+        let displays: @convention(c) (Int32) -> Unmanaged<CFTypeRef>?
         let windows: @convention(c) (Int32, UInt32, CFArray, UInt32,
-                                    UnsafeMutablePointer<UInt64>, UnsafeMutablePointer<UInt64>) -> Unmanaged<CFArray>?
+                                    UnsafeMutablePointer<UInt64>, UnsafeMutablePointer<UInt64>) -> Unmanaged<CFTypeRef>?
         let windowID: @convention(c) (AXUIElement, UnsafeMutablePointer<CGWindowID>) -> AXError
-        let element: @convention(c) (CFData) -> Unmanaged<AXUIElement>?
+        let element: @convention(c) (CFData) -> Unmanaged<CFTypeRef>?
     }
 
     // Load the read-only private APIs at runtime so unsupported macOS versions can fall back safely.
@@ -39,12 +39,22 @@ enum WindowSpaces {
               let windowID = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "_AXUIElementGetWindow"),
               let element = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "_AXUIElementCreateWithRemoteToken") else { return nil }
         return API(connection: unsafeBitCast(connection, to: (@convention(c) () -> Int32).self),
-                   displays: unsafeBitCast(displays, to: (@convention(c) (Int32) -> Unmanaged<CFArray>?).self),
+                   displays: unsafeBitCast(displays, to: (@convention(c) (Int32) -> Unmanaged<CFTypeRef>?).self),
                    windows: unsafeBitCast(windows, to: (@convention(c) (Int32, UInt32, CFArray, UInt32,
-                       UnsafeMutablePointer<UInt64>, UnsafeMutablePointer<UInt64>) -> Unmanaged<CFArray>?).self),
+                       UnsafeMutablePointer<UInt64>, UnsafeMutablePointer<UInt64>) -> Unmanaged<CFTypeRef>?).self),
                    windowID: unsafeBitCast(windowID, to: (@convention(c) (AXUIElement, UnsafeMutablePointer<CGWindowID>) -> AXError).self),
-                   element: unsafeBitCast(element, to: (@convention(c) (CFData) -> Unmanaged<AXUIElement>?).self))
+                   element: unsafeBitCast(element, to: (@convention(c) (CFData) -> Unmanaged<CFTypeRef>?).self))
     }()
+
+    // The private functions are declared by hand, so their results are type-checked before use.
+    static func array(_ result: Unmanaged<CFTypeRef>?) -> CFArray? {
+        guard let value = result?.takeRetainedValue(), CFGetTypeID(value) == CFArrayGetTypeID() else { return nil }
+        return (value as! CFArray)
+    }
+
+    static func uiElement(_ value: CFTypeRef) -> AXUIElement? {
+        CFGetTypeID(value) == AXUIElementGetTypeID() ? (value as! AXUIElement) : nil
+    }
 
     static func windowID(of element: AXUIElement) -> CGWindowID? {
         var id: CGWindowID = 0
@@ -53,7 +63,7 @@ enum WindowSpaces {
     }
 
     static func query() -> Snapshot? {
-        guard let api, let displays = api.displays(api.connection())?.takeRetainedValue() as? [[String: Any]],
+        guard let api, let displays = array(api.displays(api.connection())) as? [[String: Any]],
               !displays.isEmpty else { return nil }
         var spaces: [WindowSpace] = []
         var membership: [CGWindowID: [WindowSpace]] = [:]
@@ -65,8 +75,8 @@ enum WindowSpaces {
                                         isCurrent: id == current, isFullscreen: (raw["type"] as? Int) == 4)
                 spaces.append(space)
                 var setTags: UInt64 = 0, clearTags: UInt64 = 0
-                let ids = api.windows(api.connection(), 0, [id] as CFArray, 7, &setTags, &clearTags)?
-                    .takeRetainedValue() as? [NSNumber] ?? []
+                let ids = array(api.windows(api.connection(), 0, [id] as CFArray, 7, &setTags, &clearTags))
+                    as? [NSNumber] ?? []
                 for window in ids { membership[window.uint32Value, default: []].append(space) }
             }
         }
@@ -99,7 +109,7 @@ enum WindowSpaces {
             }
             var field = state.cursor.littleEndian
             withUnsafeBytes(of: &field) { token.append(contentsOf: $0) }
-            guard let element = api.element(token as CFData)?.takeRetainedValue() else {
+            guard let element = api.element(token as CFData).flatMap({ uiElement($0.takeRetainedValue()) }) else {
                 state.cursor &+= 1
                 continue
             }

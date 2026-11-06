@@ -175,6 +175,16 @@ final class WindowServiceTests: XCTestCase {
         assertFresh(resolve(empty, previous: [tab("empty", element: 9009, frame: empty)]), "empty frame")
     }
 
+    func testPrivateAPIResultsAreTypeChecked() {
+        XCTAssertNil(WindowSpaces.array(nil))
+        XCTAssertNil(WindowSpaces.array(Unmanaged.passRetained("text" as CFString)))
+        XCTAssertNil(WindowSpaces.array(Unmanaged.passRetained(AXUIElementCreateApplication(getpid()))))
+        XCTAssertEqual(WindowSpaces.array(Unmanaged.passRetained([1, 2] as CFArray)) as? [Int], [1, 2])
+        XCTAssertNil(WindowSpaces.uiElement("text" as CFString))
+        XCTAssertNil(WindowSpaces.uiElement([] as CFArray))
+        XCTAssertNotNil(WindowSpaces.uiElement(AXUIElementCreateApplication(getpid())))
+    }
+
     func testDuplicateWindowIDsAreDeduplicatedInsteadOfCrashing() {
         let service = WindowService(isTrusted: { true })
         service.apply(scanResult([tracked("A", title: "first"), tracked("A", title: "second"), tracked("B")]))
@@ -301,6 +311,17 @@ final class WindowServiceAccessibilityTests: XCTestCase {
         }
         XCTAssertFalse(topology.spaces.filter(\.isCurrent).isEmpty)
         XCTAssertFalse(previous.isEmpty)
+        let listed = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] ?? []
+        let ownerByWindowID = Dictionary(listed.compactMap { info -> (CGWindowID, pid_t)? in
+            guard let id = (info[kCGWindowNumber as String] as? NSNumber)?.uint32Value,
+                  let owner = (info[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value else { return nil }
+            return (id, owner)
+        }, uniquingKeysWith: { first, _ in first })
+        for window in previous {
+            guard let id = window.windowID else { continue }
+            XCTAssertEqual(ownerByWindowID[id], window.info.processID,
+                           "_AXUIElementGetWindow returned a window of another process for \(window.info.appID)")
+        }
 
         guard let sample = previous.first(where: { !$0.info.isOnCurrentSpace }), let id = sample.windowID else { return }
         var state = WindowSpaces.DiscoveryState()

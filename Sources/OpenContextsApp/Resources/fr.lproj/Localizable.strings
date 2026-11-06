@@ -32,8 +32,8 @@
 "The unreadable file was moved to %@." = "Le fichier illisible a été déplacé vers %@.";
 "Settings…" = "Réglages…";
 "Grant Accessibility Access…" = "Autoriser l’accès à l’accessibilité…";
-"Quit OpenContexts" = "Quitter OpenContexts";
-"OpenContexts Settings" = "Réglages d’OpenContexts";
+"Quit OtherContexts" = "Quitter OtherContexts";
+"OtherContexts Settings" = "Réglages d’OtherContexts";
 "Ungrouped" = "Sans groupe";
 "Rename" = "Renommer";
 "Delete Group" = "Supprimer le groupe";

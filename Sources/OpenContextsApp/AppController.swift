@@ -118,7 +118,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                              currentApp: self.settings.currentAppShortcut,
                                              sidebar: self.settings.sidebarShortcut)
                     self.windowService.setIncludeAllSpaces(self.includesWindowsFromAllDesktops)
-                    self.settingsWindow?.title = L10n.text("OpenContexts Settings", language: self.settings.language)
+                    self.settingsWindow?.title = L10n.text("OtherContexts Settings", language: self.settings.language)
                     if self.currentAppOnly != nil { self.refreshVisibleSwitcher() }
                 }
             }
@@ -309,17 +309,17 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard statusItem == nil || statusMenuLanguage != settings.language else { return }
         statusMenuLanguage = settings.language
         let item = statusItem ?? NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        let image = NSImage(systemSymbolName: "rectangle.stack", accessibilityDescription: "OpenContexts")
+        let image = NSImage(systemSymbolName: "rectangle.stack", accessibilityDescription: "OtherContexts")
         image?.size = NSSize(width: 18, height: 18)
         image?.isTemplate = true
         item.button?.image = image
-        item.button?.setAccessibilityLabel("OpenContexts")
+        item.button?.setAccessibilityLabel("OtherContexts")
         let menu = NSMenu()
         menu.addItem(withTitle: L10n.text("Settings…", language: settings.language), action: #selector(showSettings), keyEquivalent: ",").target = self
         menu.addItem(withTitle: L10n.text("Grant Accessibility Access…", language: settings.language), action: #selector(requestAccessibility), keyEquivalent: "")
             .target = self
         menu.addItem(.separator())
-        menu.addItem(withTitle: L10n.text("Quit OpenContexts", language: settings.language), action: #selector(quit), keyEquivalent: "q").target = self
+        menu.addItem(withTitle: L10n.text("Quit OtherContexts", language: settings.language), action: #selector(quit), keyEquivalent: "q").target = self
         item.menu = menu
         statusItem = item
     }
@@ -333,7 +333,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 shortcuts: shortcuts
             ))
             let window = NSWindow(contentViewController: controller)
-            window.title = L10n.text("OpenContexts Settings", language: settings.language)
+            window.title = L10n.text("OtherContexts Settings", language: settings.language)
             window.styleMask = [.titled, .closable]
             window.isReleasedWhenClosed = false
             window.delegate = self

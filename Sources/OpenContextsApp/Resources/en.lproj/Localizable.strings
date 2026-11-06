@@ -32,8 +32,8 @@
 "The unreadable file was moved to %@." = "The unreadable file was moved to %@.";
 "Settings…" = "Settings…";
 "Grant Accessibility Access…" = "Grant Accessibility Access…";
-"Quit OpenContexts" = "Quit OpenContexts";
-"OpenContexts Settings" = "OpenContexts Settings";
+"Quit OtherContexts" = "Quit OtherContexts";
+"OtherContexts Settings" = "OtherContexts Settings";
 "Ungrouped" = "Ungrouped";
 "Rename" = "Rename";
 "Delete Group" = "Delete Group";

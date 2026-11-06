@@ -32,8 +32,8 @@
 "The unreadable file was moved to %@." = "読み込めないファイルは %@ に移動しました。";
 "Settings…" = "設定…";
 "Grant Accessibility Access…" = "アクセシビリティを許可…";
-"Quit OpenContexts" = "OpenContexts を終了";
-"OpenContexts Settings" = "OpenContexts の設定";
+"Quit OtherContexts" = "OtherContexts を終了";
+"OtherContexts Settings" = "OtherContexts の設定";
 "Ungrouped" = "未分類";
 "Rename" = "名前を変更";
 "Delete Group" = "グループを削除";

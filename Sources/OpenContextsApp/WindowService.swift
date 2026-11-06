@@ -360,7 +360,7 @@ final class WindowService: ObservableObject {
             let appID = Bundle.main.bundleIdentifier ?? "OpenContexts"
             let appName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
                 ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
-                ?? "OpenContexts"
+                ?? "OtherContexts"
             return WindowInfo(id: id, appID: appID, appName: appName, title: window.title,
                               processID: ProcessInfo.processInfo.processIdentifier,
                               space: spaceSnapshot?.space(for: CGWindowID(exactly: window.windowNumber)))

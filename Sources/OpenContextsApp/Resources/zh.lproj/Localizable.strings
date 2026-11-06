@@ -32,8 +32,8 @@
 "The unreadable file was moved to %@." = "无法读取的文件已移至 %@。";
 "Settings…" = "设置…";
 "Grant Accessibility Access…" = "授予辅助功能权限…";
-"Quit OpenContexts" = "退出 OpenContexts";
-"OpenContexts Settings" = "OpenContexts 设置";
+"Quit OtherContexts" = "退出 OtherContexts";
+"OtherContexts Settings" = "OtherContexts 设置";
 "Ungrouped" = "未分组";
 "Rename" = "重命名";
 "Delete Group" = "删除分组";

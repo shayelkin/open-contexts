@@ -18,8 +18,8 @@ targets:
     info:
       path: App/Info.plist
       properties:
-        CFBundleName: Open Contexts
-        CFBundleDisplayName: Open Contexts
+        CFBundleName: OtherContexts
+        CFBundleDisplayName: OtherContexts
         CFBundleIconFile: AppIcon
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
@@ -28,6 +28,7 @@ targets:
         NSHighResolutionCapable: true
     settings:
       base:
+        PRODUCT_NAME: OtherContexts
         PRODUCT_BUNDLE_IDENTIFIER: com.shayelkin.opencontexts
         MARKETING_VERSION: "0.6"
         CURRENT_PROJECT_VERSION: 1

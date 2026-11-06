@@ -20,6 +20,28 @@ final class LocalizationTests: XCTestCase {
         }
     }
 
+    func testEveryLanguageNamesTheAppOtherContexts() throws {
+        let resources = L10n.resources
+        for language in AppLanguage.allCases where language != .system {
+            let path = try XCTUnwrap(resources.path(forResource: language.rawValue, ofType: "lproj"), "\(language)")
+            let data = try Data(contentsOf: URL(fileURLWithPath: path).appendingPathComponent("Localizable.strings"))
+            let entries = try XCTUnwrap(
+                PropertyListSerialization.propertyList(from: data, format: nil) as? [String: String], "\(language)"
+            )
+            for (key, value) in entries {
+                XCTAssertFalse(key.localizedCaseInsensitiveContains("Open Contexts") || key.localizedCaseInsensitiveContains("OpenContexts"),
+                               "\(language): \(key)")
+                XCTAssertFalse(value.localizedCaseInsensitiveContains("Open Contexts") || value.localizedCaseInsensitiveContains("OpenContexts"),
+                               "\(language): \(key) -> \(value)")
+            }
+            for key in ["Quit OtherContexts", "OtherContexts Settings"] {
+                let value = try XCTUnwrap(entries[key], "\(language): \(key)")
+                XCTAssertTrue(value.contains("OtherContexts"), "\(language): \(key) -> \(value)")
+                XCTAssertEqual(L10n.text(key, language: language), value, "\(language): \(key)")
+            }
+        }
+    }
+
     func testLanguageCodesResolve() {
         XCTAssertEqual(AppLanguage.en.resolvedCode, "en")
         XCTAssertEqual(AppLanguage.es.resolvedCode, "es")

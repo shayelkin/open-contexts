@@ -28,4 +28,25 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(AppLanguage.zh.resolvedCode, "zh")
         XCTAssertEqual(L10n.text("Ungrouped", language: .ja), "未分類")
     }
+
+    func testTranslationsUseTheSameFormatSpecifiersAsTheirKeys() throws {
+        let resources = try XCTUnwrap(L10n.resources)
+        let specifier = try NSRegularExpression(pattern: "%(?:\\d+\\$)?[-+ 0#]*\\d*(?:\\.\\d+)?(?:hh|h|ll|l|q|L|z|t|j)?[@dDiuUxXoOfFeEgGcCsSpaA%]")
+        func specifiers(_ text: String) -> [String] {
+            specifier.matches(in: text, range: NSRange(text.startIndex..., in: text))
+                .map { (text as NSString).substring(with: $0.range) }.sorted()
+        }
+        var checked = 0
+        for language in AppLanguage.allCases where language != .system {
+            let path = try XCTUnwrap(resources.path(forResource: language.rawValue, ofType: "lproj"))
+            let data = try Data(contentsOf: URL(fileURLWithPath: path).appendingPathComponent("Localizable.strings"))
+            let entries = try XCTUnwrap(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: String])
+            for (key, value) in entries {
+                XCTAssertEqual(specifiers(value), specifiers(key), "\(language): \(key) -> \(value)")
+                checked += specifiers(key).isEmpty ? 0 : 1
+            }
+        }
+        XCTAssertGreaterThan(checked, 0, "no format strings were checked")
+        XCTAssertEqual(specifiers("%@ and %1$@ and %d%% and %.2f"), ["%%", "%.2f", "%1$@", "%@", "%d"].sorted())
+    }
 }

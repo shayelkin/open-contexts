@@ -28,7 +28,7 @@ final class GroupStoreTests: XCTestCase {
         store.reconcile([d, changedC, a])
         XCTAssertEqual(store.windows(in: GroupStore.ungroupedID).map(\.id), ["a", "c", "d"])
         XCTAssertEqual(try persistedWindows(at: fileURL, in: GroupStore.ungroupedID)
-            .compactMap { $0["title"] as? String }, ["A", "Changed C", "D"])
+            .compactMap { $0["title"] as? String }, [], "unpinned ungrouped windows were persisted")
         store.createGroup(name: "Work")
         let work = try XCTUnwrap(store.groups.last?.id)
         store.moveWindow(id: "d", to: work)
@@ -106,7 +106,7 @@ final class GroupStoreTests: XCTestCase {
         let savedAmbiguity = GroupStore(fileURL: savedAmbiguityURL)
         savedAmbiguity.reconcile([window("new", title: "Same")])
         XCTAssertEqual(savedAmbiguity.windows(in: GroupStore.ungroupedID).map(\.id), ["new"])
-        XCTAssertEqual(try persistedWindows(at: savedAmbiguityURL, in: GroupStore.ungroupedID).count, 1)
+        XCTAssertEqual(try persistedWindows(at: savedAmbiguityURL, in: GroupStore.ungroupedID).count, 0)
     }
 
     func testUntitledWindowSurvivesDesktopSwitchAndRestart() throws {
@@ -168,8 +168,34 @@ final class GroupStoreTests: XCTestCase {
             store.reconcile([window(id, title: "Unique")])
             XCTAssertEqual(store.windows(in: GroupStore.ungroupedID).map(\.id), [id])
             store.reconcile([])
-            XCTAssertEqual(try persistedWindows(at: fileURL, in: GroupStore.ungroupedID).count, 1)
+            XCTAssertEqual(try persistedWindows(at: fileURL, in: GroupStore.ungroupedID).count, 0)
         }
+    }
+
+    func testUngroupedHistoryIsNeverPersistedButGroupedAndPinnedWindowsAre() throws {
+        let fileURL = temporaryFileURL()
+        for index in 0..<20 {
+            let store = GroupStore(fileURL: fileURL)
+            store.reconcile([window("w\(index)", title: "Private page \(index)", documentURL: "https://example.com/\(index)")])
+            store.reconcile([])
+        }
+        let unrelated = GroupStore(fileURL: fileURL)
+        unrelated.createGroup(name: "Force a save")
+        let data = try String(contentsOf: fileURL, encoding: .utf8)
+        XCTAssertFalse(data.contains("Private page"), "ungrouped window titles were written to disk")
+        XCTAssertFalse(data.contains("example.com"), "ungrouped document URLs were written to disk")
+
+        let store = GroupStore(fileURL: fileURL)
+        store.reconcile([window("grouped", title: "Grouped"), window("pinned", title: "Pinned"),
+                         window("loose", title: "Loose")])
+        let group = try XCTUnwrap(store.groups.last?.id)
+        store.moveWindow(id: "grouped", to: group)
+        store.togglePin(id: "pinned")
+        XCTAssertEqual(try persistedWindows(at: fileURL, in: group).compactMap { $0["title"] as? String }, ["Grouped"])
+        XCTAssertEqual(try persistedWindows(at: fileURL, in: GroupStore.ungroupedID)
+            .compactMap { $0["title"] as? String }, ["Pinned"])
+        XCTAssertEqual(store.windows(in: GroupStore.ungroupedID).map(\.id), ["pinned", "loose"],
+                       "in-memory ungrouped order must not depend on persistence")
     }
 
     func testLoadPreservesDistinctSameTitleDocumentsUntilLiveScan() throws {
@@ -208,7 +234,7 @@ final class GroupStoreTests: XCTestCase {
         XCTAssertEqual(store.windows(in: customID).map(\.id), ["live-custom"])
         XCTAssertEqual(store.windows(in: GroupStore.ungroupedID).map(\.id), ["live-1", "live-2"])
         XCTAssertEqual(try persistedWindows(at: fileURL, in: GroupStore.ungroupedID)
-            .compactMap { $0["documentURL"] as? String }, ["file:///one", "file:///two"])
+            .compactMap { $0["documentURL"] as? String }, [])
     }
 
     func testCorruptPersistenceIsReportedAndNeverOverwritten() throws {
@@ -599,7 +625,7 @@ final class GroupStoreTests: XCTestCase {
         XCTAssertTrue(restarted.windows(in: "work").isEmpty)
         XCTAssertEqual(restarted.windows(in: GroupStore.ungroupedID).map(\.id), ["a", "b"])
         XCTAssertEqual(try persistedWindows(at: fileURL, in: "work").count, 1)
-        XCTAssertEqual(try persistedWindows(at: fileURL, in: GroupStore.ungroupedID).count, 2)
+        XCTAssertEqual(try persistedWindows(at: fileURL, in: GroupStore.ungroupedID).count, 0)
 
         let crossGroupURL = temporaryFileURL()
         try writeState([
@@ -632,7 +658,7 @@ final class GroupStoreTests: XCTestCase {
                          window("blocker", title: "Other"),
                          window("new", title: "Draft", documentURL: "file:///new")])
         XCTAssertEqual(try persistedWindows(at: fileURL, in: GroupStore.ungroupedID)
-            .compactMap { $0["documentURL"] as? String }, ["file:///old", "file:///new"])
+            .compactMap { $0["documentURL"] as? String }, [])
         store.createGroup(name: "Work")
         let work = try XCTUnwrap(store.groups.last?.id)
         store.moveWindow(id: "old", to: work)
@@ -675,8 +701,9 @@ final class GroupStoreTests: XCTestCase {
         XCTAssertFalse(store.isPinned(id: "b"))
         store.togglePin(id: "b")
         XCTAssertTrue(store.isPinned(id: "b"))
-        XCTAssertEqual(try persistedWindows(at: fileURL, in: GroupStore.ungroupedID)[1]["pinnedPosition"] as? Int,
-                       1)
+        let persistedPin = try persistedWindows(at: fileURL, in: GroupStore.ungroupedID)
+        XCTAssertEqual(persistedPin.compactMap { $0["title"] as? String }, ["B"])
+        XCTAssertEqual(persistedPin.first?["pinnedPosition"] as? Int, 1)
 
         let restarted = GroupStore(fileURL: fileURL)
         XCTAssertNil(restarted.persistenceError)
@@ -684,7 +711,8 @@ final class GroupStoreTests: XCTestCase {
         XCTAssertTrue(restarted.isPinned(id: "new-b"))
         restarted.togglePin(id: "new-b")
         XCTAssertFalse(restarted.isPinned(id: "new-b"))
-        XCTAssertNil(try persistedWindows(at: fileURL, in: GroupStore.ungroupedID)[1]["pinnedPosition"])
+        XCTAssertEqual(try persistedWindows(at: fileURL, in: GroupStore.ungroupedID).count, 0,
+                       "an unpinned ungrouped window stayed persisted")
     }
 
     func testInvalidPinnedPositionBlocksPersistence() throws {
@@ -710,7 +738,7 @@ final class GroupStoreTests: XCTestCase {
         store.togglePin(id: "b")
         XCTAssertEqual(store.windows(in: GroupStore.ungroupedID).map(\.id), ["a", "b", "c"])
         XCTAssertEqual(try persistedWindows(at: fileURL, in: GroupStore.ungroupedID)
-            .compactMap { $0["title"] as? String }, ["A", "B"])
+            .compactMap { $0["title"] as? String }, ["B"])
         XCTAssertTrue(store.isPinned(id: "b"))
     }
 

@@ -512,8 +512,11 @@ public final class GroupStore: ObservableObject {
         do {
             try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(),
                                                     withIntermediateDirectories: true)
+            // Only windows the user placed in a group or pinned are remembered; ungrouped history stays in memory.
             let persistedWindows = Dictionary(uniqueKeysWithValues: groups.map { group in
-                (group.id, windowsByGroup[group.id, default: []])
+                (group.id, windowsByGroup[group.id, default: []].filter {
+                    group.id != Self.ungroupedID || $0.pinnedPosition != nil
+                })
             })
             let data = try JSONEncoder().encode(State(groups: groups, windowsByGroup: persistedWindows))
             try data.write(to: fileURL, options: .atomic)

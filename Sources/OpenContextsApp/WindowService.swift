@@ -169,9 +169,11 @@ final class WindowService: ObservableObject {
         scanInFlight = false
         guard updateTrust() else { return }
 
-        let discoveredIDs = Set(result.windows.map(\.id))
+        var discoveredIDs = Set<String>()
+        let discovered = result.windows.filter { discoveredIDs.insert($0.id).inserted }
         var orderedIDs = tracked.map(\.id).filter(discoveredIDs.contains)
-        orderedIDs.append(contentsOf: result.windows.map(\.id).filter { !orderedIDs.contains($0) })
+        let known = Set(orderedIDs)
+        orderedIDs.append(contentsOf: discovered.map(\.id).filter { !known.contains($0) })
 
         externalFocusedID = result.focusedID
         discoveries = result.discoveries
@@ -182,7 +184,7 @@ final class WindowService: ObservableObject {
             orderedIDs.insert(externalFocusedID, at: 0)
         }
 
-        let byID = Dictionary(uniqueKeysWithValues: result.windows.map { ($0.id, $0) })
+        let byID = Dictionary(uniqueKeysWithValues: discovered.map { ($0.id, $0) })
         tracked = orderedIDs.compactMap { byID[$0] }
         if fullscreenScreenIDs != result.fullscreenScreenIDs { fullscreenScreenIDs = result.fullscreenScreenIDs }
         badgeState.merge(activeAppIDs: result.activeAppIDs, reads: result.badgeReads)
@@ -346,10 +348,12 @@ final class WindowService: ObservableObject {
                               processID: ProcessInfo.processInfo.processIdentifier,
                               space: spaceSnapshot?.space(for: CGWindowID(exactly: window.windowNumber)))
         }
-        let allInfos = tracked.map(\.info) + localInfos
+        var publishedIDs = Set<String>()
+        let allInfos = (tracked.map(\.info) + localInfos).filter { publishedIDs.insert($0.id).inserted }
         let byID = Dictionary(uniqueKeysWithValues: allInfos.map { ($0.id, $0) })
         var orderedIDs = windows.map(\.id).filter { byID[$0] != nil }
-        orderedIDs.append(contentsOf: allInfos.map(\.id).filter { !orderedIDs.contains($0) })
+        let known = Set(orderedIDs)
+        orderedIDs.append(contentsOf: allInfos.map(\.id).filter { !known.contains($0) })
         let localFocusedID = NSApp.isActive
             ? localWindows.first { $0.value.value?.isKeyWindow == true }?.key
             : nil

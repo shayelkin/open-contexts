@@ -898,6 +898,23 @@ final class GroupStoreTests: XCTestCase {
         XCTAssertEqual(try persistedWindows(at: fileURL, in: work).last?["pinnedPosition"] as? Int, 2)
     }
 
+    func testDuplicateVisibleOrderIDsDoNotCrashAndKeepFirstPosition() throws {
+        let store = GroupStore(fileURL: temporaryFileURL())
+        store.reconcile([window("1", title: "A"), window("2", title: "B"), window("3", title: "C")])
+        store.createGroup(name: "G")
+        let group = try XCTUnwrap(store.groups.last).id
+        store.moveWindow(id: "1", to: group)
+        store.moveWindow(id: "2", to: group, before: nil,
+                         visibleOrderByGroup: [group: ["2", "1", "2", "1"], GroupStore.ungroupedID: ["3", "3"]])
+        XCTAssertEqual(store.windows(in: group).map(\.id), ["2", "1"])
+        XCTAssertEqual(store.windows(in: GroupStore.ungroupedID).map(\.id), ["3"])
+        store.togglePin(id: "1")
+        store.moveWindow(id: "3", to: group, before: "1",
+                         visibleOrderByGroup: [group: ["2", "3", "1", "3", "1"], GroupStore.ungroupedID: []])
+        XCTAssertEqual(store.windows(in: group).map(\.id), ["2", "3", "1"])
+        XCTAssertEqual(store.pinPosition(id: "1"), 2)
+    }
+
     private func temporaryFileURL() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

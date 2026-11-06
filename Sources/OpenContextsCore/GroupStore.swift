@@ -115,7 +115,7 @@ public final class GroupStore: ObservableObject {
 
     public func windows(in groupID: String) -> [WindowInfo] {
         guard groups.contains(where: { $0.id == groupID }) else { return [] }
-        let windowIDBySavedID = Dictionary(uniqueKeysWithValues: savedIDByWindowID.map { ($0.value, $0.key) })
+        let windowIDBySavedID = Dictionary(savedIDByWindowID.map { ($0.value, $0.key) }, uniquingKeysWith: min)
         let savedWindows = windowsByGroup[groupID, default: []].compactMap { saved in
             windowIDBySavedID[saved.id].flatMap { activeWindows[$0] }
         }
@@ -129,7 +129,7 @@ public final class GroupStore: ObservableObject {
             }
             return (liveID, position)
         }
-        let byID = Dictionary(uniqueKeysWithValues: visible.map { ($0.id, $0) })
+        let byID = Dictionary(visible.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         return Self.arrangedWindowIDs(visible.map(\.id), pinned: pinned).compactMap { byID[$0] }
     }
 
@@ -375,7 +375,8 @@ public final class GroupStore: ObservableObject {
                 let records = windowsByGroup[groupID, default: []]
                 let retainedIDs = Set(records.map(\.id))
                 let savedIDs = visibleIDs.compactMap { savedIDByWindowID[$0] }.filter(retainedIDs.contains)
-                let positions = Dictionary(uniqueKeysWithValues: savedIDs.enumerated().map { ($0.element, $0.offset) })
+                let positions = Dictionary(savedIDs.enumerated().map { ($0.element, $0.offset) },
+                                           uniquingKeysWith: { first, _ in first })
                 for index in records.indices where records[index].pinnedPosition != nil {
                     if let position = positions[records[index].id] {
                         windowsByGroup[groupID]?[index].pinnedPosition = position
@@ -398,10 +399,9 @@ public final class GroupStore: ObservableObject {
 
     private func alignSavedOrder(in groupID: String, with visibleIDs: [String]) {
         guard var records = windowsByGroup[groupID] else { return }
-        let ranks = Dictionary(uniqueKeysWithValues: visibleIDs.enumerated().compactMap { offset, id
-            -> (String, Int)? in
+        let ranks = Dictionary(visibleIDs.enumerated().compactMap { offset, id -> (String, Int)? in
             savedIDByWindowID[id].map { ($0, offset) }
-        })
+        }, uniquingKeysWith: { first, _ in first })
         let activeIndices = records.indices.filter { ranks[records[$0].id] != nil }
         let ordered = activeIndices.map { records[$0] }.sorted {
             ranks[$0.id, default: .max] < ranks[$1.id, default: .max]
@@ -428,7 +428,8 @@ public final class GroupStore: ObservableObject {
 
     private func normalizeDuplicateRecords(preferredSavedIDs: [String] = [],
                                            pinnedSlots: [String: [(WindowKey, Int)]] = [:]) {
-        let priority = Dictionary(uniqueKeysWithValues: preferredSavedIDs.enumerated().map { ($0.element, $0.offset) })
+        let priority = Dictionary(preferredSavedIDs.enumerated().map { ($0.element, $0.offset) },
+                                  uniquingKeysWith: { first, _ in first })
         let liveSavedIDs = Set(savedIDByWindowID.compactMap { liveID, savedID in
             activeWindows[liveID] == nil ? nil : savedID
         })

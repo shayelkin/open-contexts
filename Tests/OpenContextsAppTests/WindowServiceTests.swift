@@ -175,6 +175,20 @@ final class WindowServiceTests: XCTestCase {
         assertFresh(resolve(empty, previous: [tab("empty", element: 9009, frame: empty)]), "empty frame")
     }
 
+    func testDuplicateWindowIDsAreDeduplicatedInsteadOfCrashing() {
+        let service = WindowService(isTrusted: { true })
+        service.apply(scanResult([tracked("A", title: "first"), tracked("A", title: "second"), tracked("B")]))
+        XCTAssertEqual(service.windows.map(\.id), ["A", "B"])
+        XCTAssertEqual(service.windows.first?.title, "first")
+
+        let window = NSWindow(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: false)
+        window.title = "Local"
+        service.registerLocalWindow(window, id: "B")
+        XCTAssertEqual(service.windows.map(\.id), ["A", "B"])
+        XCTAssertEqual(service.windows.last?.title, "B")
+        service.unregisterLocalWindow(id: "B")
+    }
+
     func testCoreFoundationCastsCheckTheRuntimeType() throws {
         var point = CGPoint(x: 1, y: 2)
         let element = AXUIElementCreateApplication(getpid())

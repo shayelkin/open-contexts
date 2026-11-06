@@ -333,7 +333,7 @@ final class GroupStoreTests: XCTestCase {
             "groups": [["id": GroupStore.ungroupedID, "name": "未分组"],
                        ["id": "work", "name": "Work"]],
             "windowsByGroup": [
-                GroupStore.ungroupedID: [savedWindow("history", title: "Inbox — 12")],
+                GroupStore.ungroupedID: [],
                 "work": [pinned]
             ]
         ], to: fileURL)
@@ -396,7 +396,7 @@ final class GroupStoreTests: XCTestCase {
                        ["same-app-name"])
     }
 
-    func testUniquePinnedFallbackWinsOverUngroupedExactURL() throws {
+    func testExactSavedMatchWinsOverUniquePinnedFallback() throws {
         let fileURL = temporaryFileURL()
         var pinned = savedWindow("pin", title: "Old page", documentURL: "file:///old")
         pinned["pinnedPosition"] = 0
@@ -420,14 +420,20 @@ final class GroupStoreTests: XCTestCase {
         let singleRefresh = GroupStore(fileURL: fileURL)
         singleRefresh.updateLiveWindows([window("bitwarden", title: "Bitwarden",
                                                 documentURL: "file:///bitwarden")])
-        XCTAssertEqual(singleRefresh.windows(in: "work").map(\.id), ["bitwarden"])
+        XCTAssertTrue(singleRefresh.windows(in: "work").isEmpty, "a window with its own saved record took a pin")
+        XCTAssertEqual(singleRefresh.windows(in: GroupStore.ungroupedID).map(\.id), ["bitwarden"])
 
         let singleLive = GroupStore(fileURL: fileURL)
         singleLive.reconcile([window("bitwarden", title: "Bitwarden",
                                      documentURL: "file:///bitwarden")])
-        XCTAssertEqual(singleLive.windows(in: "work").map(\.id), ["bitwarden"])
-        XCTAssertTrue(singleLive.windows(in: GroupStore.ungroupedID).isEmpty)
-        XCTAssertTrue(singleLive.isPinned(id: "bitwarden"))
+        XCTAssertTrue(singleLive.windows(in: "work").isEmpty)
+        XCTAssertEqual(singleLive.windows(in: GroupStore.ungroupedID).map(\.id), ["bitwarden"])
+        XCTAssertFalse(singleLive.isPinned(id: "bitwarden"))
+
+        let unrelated = GroupStore(fileURL: fileURL)
+        unrelated.reconcile([window("mail", title: "Mail")])
+        XCTAssertEqual(unrelated.windows(in: "work").map(\.id), ["mail"],
+                       "a window without any saved match no longer falls back to the unique pin")
     }
 
     func testUniquePinnedWindowRebindsAfterTitleAndDocumentChange() throws {

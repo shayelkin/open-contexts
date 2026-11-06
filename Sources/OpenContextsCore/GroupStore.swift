@@ -349,10 +349,14 @@ public final class GroupStore: ObservableObject {
         let liveByApp = Dictionary(grouping: windows, by: \.appID)
         let pinnedByApp = Dictionary(grouping: savedByID.values.filter { $0.pinnedPosition != nil },
                                      by: \.appID)
+        // An app's only live window takes its only pinned record when no saved record matches it directly,
+        // so a pinned window with a dynamic title keeps its place.
         for (appID, live) in liveByApp where live.count == 1 {
             guard let window = live.first, let pinned = pinnedByApp[appID], pinned.count == 1,
                   let saved = pinned.first, savedIDByWindowID[window.id] == nil,
-                  !usedSavedIDs.contains(saved.id) else { continue }
+                  !usedSavedIDs.contains(saved.id),
+                  Self.matchKeys(appID: window.appID, title: window.title, documentURL: window.documentURL)
+                    .allSatisfy({ savedByKey[$0] == nil }) else { continue }
             savedIDByWindowID = savedIDByWindowID.filter { $0.value != saved.id }
             savedIDByWindowID[window.id] = saved.id
             usedSavedIDs.insert(saved.id)

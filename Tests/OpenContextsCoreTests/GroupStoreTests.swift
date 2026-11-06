@@ -17,7 +17,7 @@ final class GroupStoreTests: XCTestCase {
         XCTAssertEqual(store.windows(in: GroupStore.ungroupedID).map(\.id), ["a", "b", "c"])
         XCTAssertEqual(store.windows(in: GroupStore.ungroupedID)[1], renamed)
         XCTAssertEqual(store.revision, revision)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
+        XCTAssertFalse(fileExists(fileURL))
 
         let d = window("d", title: "D")
         store.updateLiveWindows([d, c, renamed, a])
@@ -35,10 +35,10 @@ final class GroupStoreTests: XCTestCase {
         store.moveWindow(id: "d", to: work)
         store.moveWindow(id: "a", to: work)
         store.moveWindow(id: "a", to: work, before: "d")
-        let persisted = try Data(contentsOf: fileURL)
+        let persisted = try fileData(fileURL)
         store.updateLiveWindows([d, changedC, a])
         XCTAssertEqual(store.windows(in: work).map(\.id), ["a", "d"])
-        XCTAssertEqual(try Data(contentsOf: fileURL), persisted)
+        XCTAssertEqual(try fileData(fileURL), persisted)
     }
 
     func testGroupAndWindowOrderingAndDeletion() throws {
@@ -180,22 +180,22 @@ final class GroupStoreTests: XCTestCase {
         store.createGroup(name: "Mail")
         let mail = try XCTUnwrap(store.groups.last?.id)
         store.moveWindow(id: "grouped", to: mail)
-        let written = try Data(contentsOf: fileURL)
+        let written = try fileData(fileURL)
 
         store.updateLiveWindows([window("grouped", title: "Inbox (1)"), window("loose", title: "Loose 2")])
         XCTAssertFalse(store.hasPendingChanges, "an ungrouped title change scheduled a write")
         store.updateLiveWindows([window("grouped", title: "Inbox (7)", documentURL: "file:///mail"),
                                  window("loose", title: "Loose 2")])
         XCTAssertTrue(store.hasPendingChanges)
-        XCTAssertEqual(try Data(contentsOf: fileURL), written, "a live refresh wrote to disk")
+        XCTAssertEqual(try fileData(fileURL), written, "a live refresh wrote to disk")
         store.flushPendingChanges()
         XCTAssertFalse(store.hasPendingChanges)
         let saved = try persistedWindows(at: fileURL, in: mail)
         XCTAssertEqual(saved.compactMap { $0["title"] as? String }, ["Inbox (7)"])
         XCTAssertEqual(saved.compactMap { $0["documentURL"] as? String }, ["file:///mail"])
-        let flushed = try Data(contentsOf: fileURL)
+        let flushed = try fileData(fileURL)
         store.flushPendingChanges()
-        XCTAssertEqual(try Data(contentsOf: fileURL), flushed)
+        XCTAssertEqual(try fileData(fileURL), flushed)
 
         let restarted = GroupStore(fileURL: fileURL)
         restarted.reconcile([window("new", title: "Inbox (7)")])
@@ -211,7 +211,7 @@ final class GroupStoreTests: XCTestCase {
         }
         let unrelated = GroupStore(fileURL: fileURL)
         unrelated.createGroup(name: "Force a save")
-        let data = try String(contentsOf: fileURL, encoding: .utf8)
+        let data = try String(decoding: fileData(fileURL), as: UTF8.self)
         XCTAssertFalse(data.contains("Private page"), "ungrouped window titles were written to disk")
         XCTAssertFalse(data.contains("example.com"), "ungrouped document URLs were written to disk")
 
@@ -280,11 +280,11 @@ final class GroupStoreTests: XCTestCase {
         XCTAssertFalse(store.persistenceErrorDetail?.isEmpty ?? true)
         let backup = try XCTUnwrap(store.persistenceBackupURL)
         XCTAssertEqual(backup.deletingLastPathComponent(), fileURL.deletingLastPathComponent())
-        XCTAssertEqual(try Data(contentsOf: backup), corrupt, "the unreadable file was not kept")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
+        XCTAssertEqual(try fileData(backup), corrupt, "the unreadable file was not kept")
+        XCTAssertFalse(fileExists(fileURL))
 
         store.createGroup(name: "Fresh")
-        XCTAssertEqual(try Data(contentsOf: backup), corrupt)
+        XCTAssertEqual(try fileData(backup), corrupt)
         XCTAssertEqual(GroupStore(fileURL: fileURL).groups.map(\.name).last, "Fresh", "changes after recovery were lost")
         XCTAssertEqual(store.persistenceErrorOperation, .read, "a later save hid the read error")
         XCTAssertNotNil(store.persistenceErrorDetail)
@@ -300,22 +300,54 @@ final class GroupStoreTests: XCTestCase {
         defer { subscription.cancel() }
 
         store.createGroup(name: "Unsaved")
+        store.waitForPendingWrites()
         XCTAssertEqual(operations, [.write], "a save failure was not published")
         XCTAssertFalse(store.persistenceErrorDetail?.isEmpty ?? true)
 
         try FileManager.default.removeItem(at: blocker)
         store.createGroup(name: "Saved")
+        store.waitForPendingWrites()
         XCTAssertEqual(operations, [.write, nil], "a successful save did not clear the error")
         XCTAssertNil(store.persistenceErrorDetail)
         XCTAssertEqual(GroupStore(fileURL: blocker.appendingPathComponent("groups.json")).groups.map(\.name),
                        ["Ungrouped", "Unsaved", "Saved"])
     }
 
+    func testQueuedWritesLandInOrderAndAFailedWriteIsRetriedByTheNextFlush() throws {
+        let fileURL = temporaryFileURL()
+        let store = GroupStore(fileURL: fileURL)
+        let names = (0..<50).map { "Group \($0)" }
+        names.forEach(store.createGroup)
+        XCTAssertEqual(GroupStore(fileURL: fileURL).groups.map(\.name), ["Ungrouped"] + names,
+                       "a restart did not see the last queued write")
+
+        let blocked = temporaryFileURL().deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: blocked.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data().write(to: blocked)
+        let failing = GroupStore(fileURL: blocked.appendingPathComponent("groups.json"))
+        failing.reconcile([window("w", title: "Old")])
+        failing.createGroup(name: "G")
+        let group = try XCTUnwrap(failing.groups.last?.id)
+        failing.moveWindow(id: "w", to: group)
+        failing.updateLiveWindows([window("w", title: "New")])
+        failing.flushPendingChanges()
+        failing.waitForPendingWrites()
+        XCTAssertEqual(failing.persistenceErrorOperation, .write)
+        XCTAssertTrue(failing.hasPendingChanges, "a failed write was forgotten")
+        try FileManager.default.removeItem(at: blocked)
+        failing.flushPendingChanges()
+        failing.waitForPendingWrites()
+        XCTAssertNil(failing.persistenceErrorOperation)
+        XCTAssertFalse(failing.hasPendingChanges)
+        XCTAssertEqual(try persistedWindows(at: blocked.appendingPathComponent("groups.json"), in: group)
+            .compactMap { $0["title"] as? String }, ["New"])
+    }
+
     func testUngroupedNameIsNeutralAndAnyStoredNameLoads() throws {
         let fresh = temporaryFileURL()
         let store = GroupStore(fileURL: fresh)
         store.createGroup(name: "Work")
-        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: fresh)) as? [String: Any])
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: fileData(fresh)) as? [String: Any])
         let stored = try XCTUnwrap(root["groups"] as? [[String: Any]])
         XCTAssertEqual(stored.first?["name"] as? String, "Ungrouped")
 
@@ -344,7 +376,7 @@ final class GroupStoreTests: XCTestCase {
         XCTAssertEqual(store.persistenceErrorOperation, .read)
         XCTAssertNil(store.persistenceBackupURL)
         store.createGroup(name: "In memory")
-        XCTAssertEqual(try Data(contentsOf: fileURL), corrupt)
+        XCTAssertEqual(try fileData(fileURL), corrupt)
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path), ["groups.json"])
     }
 
@@ -358,10 +390,10 @@ final class GroupStoreTests: XCTestCase {
         store.moveWindow(id: first.id, to: stable)
 
         let revision = store.revision
-        let persisted = try Data(contentsOf: fileURL)
+        let persisted = try fileData(fileURL)
         store.reconcile([first])
         XCTAssertEqual(store.revision, revision)
-        XCTAssertEqual(try Data(contentsOf: fileURL), persisted)
+        XCTAssertEqual(try fileData(fileURL), persisted)
 
         store.reconcile([window("same-id", title: "Changed")])
         XCTAssertEqual(store.windows(in: stable).map(\.id), ["same-id"])
@@ -422,13 +454,13 @@ final class GroupStoreTests: XCTestCase {
         let notes = try XCTUnwrap(original.groups.last?.id)
         original.moveWindow(id: "old", to: notes)
         original.togglePin(id: "old")
-        let persisted = try Data(contentsOf: fileURL)
+        let persisted = try fileData(fileURL)
 
         original.updateLiveWindows([window("new", title: "All iCloud — 10 notes")])
         XCTAssertEqual(original.windows(in: notes).map(\.id), ["new"])
         XCTAssertTrue(original.windows(in: GroupStore.ungroupedID).isEmpty)
         XCTAssertTrue(original.isPinned(id: "new"))
-        XCTAssertEqual(try Data(contentsOf: fileURL), persisted)
+        XCTAssertEqual(try fileData(fileURL), persisted)
 
         let restarted = GroupStore(fileURL: fileURL)
         restarted.updateLiveWindows([window("new", title: "All iCloud — 10 notes")])
@@ -436,7 +468,7 @@ final class GroupStoreTests: XCTestCase {
         XCTAssertTrue(restarted.windows(in: GroupStore.ungroupedID).isEmpty)
         XCTAssertTrue(restarted.isPinned(id: "new"))
         XCTAssertEqual(restarted.revision, 0)
-        XCTAssertEqual(try Data(contentsOf: fileURL), persisted)
+        XCTAssertEqual(try fileData(fileURL), persisted)
     }
 
     func testPinnedFallbackRejectsAmbiguousLiveApps() throws {
@@ -514,12 +546,12 @@ final class GroupStoreTests: XCTestCase {
         ], to: fileURL)
 
         let store = GroupStore(fileURL: fileURL)
-        let persisted = try Data(contentsOf: fileURL)
+        let persisted = try fileData(fileURL)
         let live = window("new", title: "New title", documentURL: "file:///new")
         store.updateLiveWindows([live])
         XCTAssertEqual(store.windows(in: "work").map(\.id), ["new"])
         XCTAssertTrue(store.isPinned(id: "new"))
-        XCTAssertEqual(try Data(contentsOf: fileURL), persisted)
+        XCTAssertEqual(try fileData(fileURL), persisted)
 
         let restarted = GroupStore(fileURL: fileURL)
         restarted.reconcile([live])
@@ -638,7 +670,7 @@ final class GroupStoreTests: XCTestCase {
         let restarted = GroupStore(fileURL: fileURL)
         restarted.reconcile([window("restored", title: "Original")])
         XCTAssertEqual(restarted.windows(in: work).map(\.id), ["restored"])
-        let persisted = try Data(contentsOf: fileURL)
+        let persisted = try fileData(fileURL)
         let revision = restarted.revision
 
         restarted.updateLiveWindows([window("new", title: "New"), window("restored", title: "Renamed")])
@@ -651,14 +683,14 @@ final class GroupStoreTests: XCTestCase {
         restarted.updateLiveWindows([window("restored", title: "Renamed"), window("new", title: "New")])
         XCTAssertEqual(restarted.windows(in: work).map(\.id), ["restored"])
         XCTAssertEqual(restarted.revision, revision)
-        XCTAssertEqual(try Data(contentsOf: fileURL), persisted)
+        XCTAssertEqual(try fileData(fileURL), persisted)
 
         restarted.moveWindow(id: "restored", to: work)
         XCTAssertEqual(try persistedWindows(at: fileURL, in: work).first?["title"] as? String, "Renamed")
         restarted.moveWindow(id: "new", to: work)
         XCTAssertEqual(restarted.windows(in: work).map(\.id), ["restored", "new"])
         XCTAssertEqual(try persistedWindows(at: fileURL, in: work).count, 2)
-        XCTAssertNotEqual(try Data(contentsOf: fileURL), persisted)
+        XCTAssertNotEqual(try fileData(fileURL), persisted)
     }
 
     func testLiveRefreshRebindsNewIDsWithoutChangingPersistence() throws {
@@ -669,7 +701,7 @@ final class GroupStoreTests: XCTestCase {
         let work = try XCTUnwrap(store.groups.last?.id)
         store.moveWindow(id: "old-a", to: work)
         store.moveWindow(id: "old-b", to: work)
-        let persisted = try Data(contentsOf: fileURL)
+        let persisted = try fileData(fileURL)
         let revision = store.revision
 
         store.updateLiveWindows([])
@@ -677,7 +709,7 @@ final class GroupStoreTests: XCTestCase {
         store.updateLiveWindows([window("new-b", title: "B"), window("new-a", title: "A")])
         XCTAssertEqual(store.windows(in: work).map(\.id), ["new-a", "new-b"])
         XCTAssertEqual(store.revision, revision)
-        XCTAssertEqual(try Data(contentsOf: fileURL), persisted)
+        XCTAssertEqual(try fileData(fileURL), persisted)
 
         store.updateLiveWindows([window("old-a", title: "Changed"), window("new-a", title: "A"),
                                  window("new-b", title: "B")])
@@ -695,12 +727,12 @@ final class GroupStoreTests: XCTestCase {
 
         let restarted = GroupStore(fileURL: fileURL)
         restarted.reconcile([])
-        let persisted = try Data(contentsOf: fileURL)
+        let persisted = try fileData(fileURL)
         let revision = restarted.revision
         restarted.updateLiveWindows([window("new", title: "Draft")])
         XCTAssertEqual(restarted.windows(in: work).map(\.id), ["new"])
         XCTAssertEqual(restarted.revision, revision)
-        XCTAssertEqual(try Data(contentsOf: fileURL), persisted)
+        XCTAssertEqual(try fileData(fileURL), persisted)
     }
 
     func testSameTitleRecordsWithDifferentURLsArePreservedAndAmbiguousTitlesStayUngrouped() throws {
@@ -825,12 +857,12 @@ final class GroupStoreTests: XCTestCase {
             "groups": [["id": GroupStore.ungroupedID, "name": "未分组"]],
             "windowsByGroup": [GroupStore.ungroupedID: [invalid]]
         ], to: fileURL)
-        let original = try Data(contentsOf: fileURL)
+        let original = try fileData(fileURL)
         let store = GroupStore(fileURL: fileURL)
         XCTAssertNotNil(store.persistenceErrorOperation)
         store.createGroup(name: "After recovery")
-        XCTAssertEqual(try Data(contentsOf: try XCTUnwrap(store.persistenceBackupURL)), original)
-        XCTAssertNotEqual(try Data(contentsOf: fileURL), original)
+        XCTAssertEqual(try fileData(try XCTUnwrap(store.persistenceBackupURL)), original)
+        XCTAssertNotEqual(try fileData(fileURL), original)
     }
 
     func testPinningUnsavedLiveWindowKeepsVisiblePosition() throws {
@@ -1052,8 +1084,19 @@ final class GroupStoreTests: XCTestCase {
             .appendingPathComponent("groups.json")
     }
 
+    /// Reads the file once all queued writes, which happen off the main thread, have finished.
+    private func fileData(_ url: URL) throws -> Data {
+        GroupStore.waitForQueuedWrites()
+        return try Data(contentsOf: url)
+    }
+
+    private func fileExists(_ url: URL) -> Bool {
+        GroupStore.waitForQueuedWrites()
+        return FileManager.default.fileExists(atPath: url.path)
+    }
+
     private func persistedWindows(at fileURL: URL, in groupID: String) throws -> [[String: Any]] {
-        let object = try JSONSerialization.jsonObject(with: Data(contentsOf: fileURL))
+        let object = try JSONSerialization.jsonObject(with: fileData(fileURL))
         let root = try XCTUnwrap(object as? [String: Any])
         let windowsByGroup = try XCTUnwrap(root["windowsByGroup"] as? [String: Any])
         return try XCTUnwrap(windowsByGroup[groupID] as? [[String: Any]])

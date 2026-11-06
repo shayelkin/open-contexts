@@ -46,6 +46,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         groupFlushTimer?.invalidate()
         groupStore.flushPendingChanges()
+        groupStore.waitForPendingWrites()
         shortcuts.stop()
         windowService.stop()
         sidebars.values.forEach { $0.close() }

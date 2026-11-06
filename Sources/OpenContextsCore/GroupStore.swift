@@ -50,6 +50,22 @@ public final class GroupStore: ObservableObject {
     }
 
     private let fileURL: URL
+    private static let writeQueue = DispatchQueue(label: "OpenContexts.GroupStore.write", qos: .utility)
+    private let latestWrite = LatestWrite()
+    private var writeGeneration = 0
+    private var appliedWriteGeneration = 0
+
+    private struct WriteOutcome {
+        let generation: Int
+        let error: String?
+    }
+
+    private final class LatestWrite: @unchecked Sendable {
+        private let lock = NSLock()
+        private var outcome: WriteOutcome?
+        func store(_ value: WriteOutcome) { lock.withLock { outcome = value } }
+        func load() -> WriteOutcome? { lock.withLock { outcome } }
+    }
     private var windowsByGroup: [String: [SavedWindow]]
     private var activeWindows: [String: WindowInfo] = [:]
     private var activeWindowOrder: [String] = []
@@ -506,6 +522,8 @@ public final class GroupStore: ObservableObject {
     }
 
     private func load() {
+        // A store for the same file may still be writing it.
+        Self.writeQueue.sync {}
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
         do {
             let state = try JSONDecoder().decode(State.self, from: Data(contentsOf: fileURL))
@@ -544,27 +562,67 @@ public final class GroupStore: ObservableObject {
         }
     }
 
+    /// Encodes on the caller and writes on a serial queue shared by all stores, so the main thread does no disk I/O.
     private func save() {
         guard !persistenceBlocked else { return }
+        writeGeneration += 1
+        let generation = writeGeneration
+        let data: Data
         do {
-            try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(),
-                                                    withIntermediateDirectories: true)
             // Only windows the user placed in a group or pinned are remembered; ungrouped history stays in memory.
             let persistedWindows = Dictionary(uniqueKeysWithValues: groups.map { group in
                 (group.id, windowsByGroup[group.id, default: []].filter {
                     group.id != Self.ungroupedID || $0.pinnedPosition != nil
                 })
             })
-            let data = try JSONEncoder().encode(State(groups: groups, windowsByGroup: persistedWindows))
-            try data.write(to: fileURL, options: .atomic)
-            if persistenceErrorOperation == .write {
-                persistenceErrorOperation = nil
-                persistenceErrorDetail = nil
-            }
-            hasPendingChanges = false
+            data = try JSONEncoder().encode(State(groups: groups, windowsByGroup: persistedWindows))
         } catch {
-            persistenceErrorOperation = .write
-            persistenceErrorDetail = error.localizedDescription
+            applyWrite(WriteOutcome(generation: generation, error: error.localizedDescription))
+            return
         }
+        hasPendingChanges = false
+        let fileURL = fileURL
+        let outcome = latestWrite
+        Self.writeQueue.async { [weak self] in
+            var failure: String?
+            do {
+                try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(),
+                                                        withIntermediateDirectories: true)
+                try data.write(to: fileURL, options: .atomic)
+            } catch {
+                failure = error.localizedDescription
+            }
+            outcome.store(WriteOutcome(generation: generation, error: failure))
+            DispatchQueue.main.async { self?.applyLatestWrite() }
+        }
+    }
+
+    /// Blocks until every store's queued writes have finished.
+    public static func waitForQueuedWrites() {
+        writeQueue.sync {}
+    }
+
+    /// Blocks until every queued write has finished and publishes its outcome.
+    public func waitForPendingWrites() {
+        Self.writeQueue.sync {}
+        applyLatestWrite()
+    }
+
+    private func applyLatestWrite() {
+        guard let outcome = latestWrite.load(), outcome.generation > appliedWriteGeneration else { return }
+        applyWrite(outcome)
+    }
+
+    private func applyWrite(_ outcome: WriteOutcome) {
+        appliedWriteGeneration = max(appliedWriteGeneration, outcome.generation)
+        if let error = outcome.error {
+            persistenceErrorOperation = .write
+            persistenceErrorDetail = error
+            hasPendingChanges = true
+            return
+        }
+        guard outcome.generation == writeGeneration, persistenceErrorOperation == .write else { return }
+        persistenceErrorOperation = nil
+        persistenceErrorDetail = nil
     }
 }

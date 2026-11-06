@@ -239,8 +239,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
             switchingWindowCount = switchingResults.count
             guard !switchingResults.isEmpty else { return }
             let firstIsFocused = switchingResults.first?.window.id == windowService.focusedWindowID
-            selectedIndex = reverse ? switchingResults.count - 1
-                : firstIsFocused ? min(1, switchingResults.count - 1) : 0
+            selectedIndex = SwitcherSelection.initial(count: switchingResults.count, firstIsFocused: firstIsFocused,
+                                                      reverse: reverse)
             switchers.values.forEach {
                 $0.show(results: switchingResults, selectedIndex: selectedIndex,
                         groupBySpace: settings.showWindowsFromAllDesktops,
@@ -248,8 +248,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
         case let .step(amount):
             guard !switchingResults.isEmpty else { return }
-            selectedIndex = (selectedIndex + amount % switchingResults.count + switchingResults.count)
-                % switchingResults.count
+            selectedIndex = SwitcherSelection.stepped(selectedIndex, by: amount, count: switchingResults.count)
             updateSwitchers(resetHover: true)
         case let .search(query):
             let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -264,7 +263,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
             guard !windows.isEmpty else { finishSwitcher(activating: nil); return }
             switchingResults = WindowSwitcher.filter(windows, query: query, allSpaces: settings.showWindowsFromAllDesktops)
             selectedIndex = query.isEmpty
-                ? selectionBeforeSearch.flatMap { id in switchingResults.firstIndex { $0.window.id == id } } ?? 0
+                ? SwitcherSelection.preserved(selectionBeforeSearch, in: switchingResults.map(\.window.id), fallback: 0)
                 : 0
             updateSwitchers(resetHover: true)
         case .commit:
@@ -285,8 +284,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return
         }
         switchingResults = WindowSwitcher.filter(windows, query: searchQuery, allSpaces: settings.showWindowsFromAllDesktops)
-        selectedIndex = selectedID.flatMap { id in switchingResults.firstIndex(where: { $0.window.id == id }) }
-            ?? min(selectedIndex, max(0, switchingResults.count - 1))
+        selectedIndex = SwitcherSelection.preserved(selectedID, in: switchingResults.map(\.window.id),
+                                                    fallback: selectedIndex)
         updateSwitchers()
     }
 

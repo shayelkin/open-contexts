@@ -763,10 +763,10 @@ final class SidebarPanelTests: XCTestCase {
     func testUntitledUngroupedDrops() {
         for position in SidebarPosition.allCases {
             sidebar.update(groups: dragGroups, windowsByGroup: coordinateWindows,
-                           alwaysVisible: true, fullscreen: false, position: position)
-            let titledHeight = sidebar.smokeNaturalContentHeight
+                           alwaysVisible: true, fullscreen: false, showUngrouped: false, position: position)
+            let withoutUngroupedHeight = sidebar.smokeNaturalContentHeight
             sidebar.update(groups: dragGroups, windowsByGroup: coordinateWindows,
-                           alwaysVisible: true, fullscreen: false, showUngroupedTitle: false, position: position)
+                           alwaysVisible: true, fullscreen: false, position: position)
             sidebar.contentView?.layoutSubtreeIfNeeded()
             guard sidebar.smokeRowOrder.first == "g:\(GroupStore.ungroupedID)",
                   sidebar.smokeVisibleRowOrder == [
@@ -775,7 +775,7 @@ final class SidebarPanelTests: XCTestCase {
                       "g:\(secondGroupID)", "w:\(windows[8].id)", "w:\(windows[9].id)"
                   ],
                   sidebar.smokeFirstVisibleRowStartsAtEdge,
-                  position == .bottom || abs(titledHeight - sidebar.smokeNaturalContentHeight - 32) < 1 else {
+                  position == .bottom || abs(sidebar.smokeNaturalContentHeight - withoutUngroupedHeight - 50) < 1 else {
                 return XCTFail("sidebar Ungrouped title was not hidden at \(position): \(sidebar.smokeVisibleRowOrder) \(sidebar.smokeLayoutDescription)")
             }
             let coordinates = sidebar.smokeRowCoordinates
@@ -808,13 +808,12 @@ final class SidebarPanelTests: XCTestCase {
             }
         }
         sidebar.update(groups: dragGroups, windowsByGroup: coordinateWindows,
-                       alwaysVisible: true, fullscreen: false, showUngrouped: false,
-                       showUngroupedTitle: false, position: .right)
+                       alwaysVisible: true, fullscreen: false, showUngrouped: false, position: .right)
         guard sidebar.smokeRowOrder == [
             "g:\(firstGroupID)", "w:\(windows[6].id)", "w:\(windows[7].id)",
             "g:\(secondGroupID)", "w:\(windows[8].id)", "w:\(windows[9].id)"
         ] else {
-            return XCTFail("hidden Ungrouped title setting changed hidden Ungrouped rows: \(sidebar.smokeRowOrder)")
+            return XCTFail("hidden Ungrouped kept Ungrouped rows: \(sidebar.smokeRowOrder)")
         }
     }
 

@@ -32,7 +32,6 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
     private var fullscreen = false
     private var enabled = true
     private var showUngrouped = true
-    private var showUngroupedTitle = true
     private var showCreateGroup = true
     private var hasVisibleContent = true
     private var verticalAlignment: SidebarVerticalAlignment = .center
@@ -84,7 +83,6 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
         let fullscreen: Bool
         let enabled: Bool
         let showUngrouped: Bool
-        let showUngroupedTitle: Bool
         let showCreateGroup: Bool
         let verticalAlignment: SidebarVerticalAlignment
         let sidebarWidth: CGFloat
@@ -211,7 +209,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
 
     func update(groups: [WindowGroup], windowsByGroup: [String: [WindowInfo]],
                 alwaysVisible: Bool, fullscreen: Bool, enabled: Bool = true,
-                showUngrouped: Bool = true, showUngroupedTitle: Bool = true, showCreateGroup: Bool = true,
+                showUngrouped: Bool = true, showCreateGroup: Bool = true,
                 verticalAlignment: SidebarVerticalAlignment = .center,
                 sidebarWidth: CGFloat = CGFloat(AppSettings.defaultSidebarWidth),
                 position: SidebarPosition = .right,
@@ -236,7 +234,6 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
             pendingUpdate = PendingSidebarUpdate(groups: groups, windowsByGroup: windowsByGroup,
                                                  alwaysVisible: alwaysVisible, fullscreen: fullscreen,
                                                  enabled: enabled, showUngrouped: showUngrouped,
-                                                 showUngroupedTitle: showUngroupedTitle,
                                                  showCreateGroup: showCreateGroup,
                                                  verticalAlignment: verticalAlignment,
                                                  sidebarWidth: requestedWidth,
@@ -250,10 +247,8 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
         self.sidebarWidth = requestedWidth
         self.verticalAlignment = verticalAlignment
         let groupVisibilityChanged = self.showUngrouped != showUngrouped
-            || self.showUngroupedTitle != showUngroupedTitle
             || self.showCreateGroup != showCreateGroup
         self.showUngrouped = showUngrouped
-        self.showUngroupedTitle = showUngroupedTitle
         self.showCreateGroup = showCreateGroup
         self.itemDisplayMode = itemDisplayMode
         self.language = language
@@ -317,7 +312,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
                 onClick: nil,
                 onDraggingChanged: { [weak self] in self?.sourceDraggingChanged($0) }
             )
-            header.isHidden = group.id == GroupStore.ungroupedID && !showUngroupedTitle
+            header.isHidden = group.id == GroupStore.ungroupedID
             if group.id != GroupStore.ungroupedID {
                 let menu = NSMenu()
                 let rename = NSMenuItem(title: L10n.text("Rename", language: language), action: #selector(renameGroup(_:)), keyEquivalent: "")
@@ -375,7 +370,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
             configureBottomItemWidths()
         } else {
             naturalContentHeight = Self.contentHeight(groupCount: visibleGroups.filter {
-                $0.id != GroupStore.ungroupedID || showUngroupedTitle
+                $0.id != GroupStore.ungroupedID
             }.count,
                                                       windowCount: visibleGroups.reduce(0) {
                 $0 + windowsByGroup[$1.id, default: []].count
@@ -685,7 +680,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
         let next = pendingUpdate ?? PendingSidebarUpdate(
             groups: renderedGroups, windowsByGroup: renderedWindows,
             alwaysVisible: alwaysVisible, fullscreen: fullscreen,
-            enabled: enabled, showUngrouped: showUngrouped, showUngroupedTitle: showUngroupedTitle,
+            enabled: enabled, showUngrouped: showUngrouped,
             showCreateGroup: showCreateGroup,
             verticalAlignment: verticalAlignment, sidebarWidth: sidebarWidth, position: position,
             itemDisplayMode: itemDisplayMode, language: language
@@ -698,7 +693,6 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
         update(groups: next.groups, windowsByGroup: next.windowsByGroup,
                alwaysVisible: next.alwaysVisible, fullscreen: next.fullscreen,
                enabled: next.enabled, showUngrouped: next.showUngrouped,
-               showUngroupedTitle: next.showUngroupedTitle,
                showCreateGroup: next.showCreateGroup, verticalAlignment: next.verticalAlignment,
                sidebarWidth: next.sidebarWidth,
                position: next.position, itemDisplayMode: next.itemDisplayMode,

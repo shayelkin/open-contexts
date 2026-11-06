@@ -66,7 +66,6 @@ final class AppSettings: ObservableObject {
     @Published private(set) var sidebarVerticalAlignment: SidebarVerticalAlignment
     @Published private(set) var sidebarWidth: Double
     @Published private(set) var showUngrouped: Bool
-    @Published private(set) var showUngroupedTitle: Bool
     @Published private(set) var showCreateGroup: Bool
     @Published private(set) var language: AppLanguage
     @Published private(set) var allWindowsShortcut: KeyboardShortcut
@@ -103,7 +102,6 @@ final class AppSettings: ObservableObject {
             rawValue: defaults.string(forKey: "sidebarVerticalAlignment") ?? ""
         ) ?? .center
         showUngrouped = defaults.object(forKey: "showUngrouped") as? Bool ?? true
-        showUngroupedTitle = defaults.object(forKey: "showUngroupedTitle") as? Bool ?? true
         showCreateGroup = defaults.object(forKey: "showCreateGroup") as? Bool ?? true
         let savedWidth = defaults.object(forKey: "sidebarWidth") as? Double ?? Self.defaultSidebarWidth
         sidebarWidth = savedWidth.isFinite
@@ -139,11 +137,6 @@ final class AppSettings: ObservableObject {
     func setShowUngrouped(_ show: Bool) {
         showUngrouped = show
         defaults.set(show, forKey: "showUngrouped")
-    }
-
-    func setShowUngroupedTitle(_ show: Bool) {
-        showUngroupedTitle = show
-        defaults.set(show, forKey: "showUngroupedTitle")
     }
 
     func setSidebarWidth(_ width: Double) {
@@ -431,10 +424,6 @@ struct SettingsView: View {
                     Toggle(L10n.text("Show Ungrouped (hidden when empty)", language: language), isOn: Binding(
                         get: { settings.showUngrouped }, set: settings.setShowUngrouped
                     ))
-                    Toggle(L10n.text("Show Ungrouped title", language: language), isOn: Binding(
-                        get: { settings.showUngroupedTitle }, set: settings.setShowUngroupedTitle
-                    ))
-                    .disabled(!settings.showUngrouped)
                     Toggle(L10n.text("Show New Group button", language: language), isOn: Binding(
                         get: { settings.showCreateGroup }, set: settings.setShowCreateGroup
                     ))

@@ -40,7 +40,6 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(settings.sidebarMode, .always)
         XCTAssertEqual(settings.sidebarVerticalAlignment, .center)
         XCTAssertTrue(settings.showUngrouped)
-        XCTAssertTrue(settings.showUngroupedTitle)
         XCTAssertTrue(settings.showCreateGroup)
         XCTAssertEqual(settings.sidebarWidth, AppSettings.defaultSidebarWidth)
     }
@@ -80,18 +79,10 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(hidden.sidebarMode, .hidden)
         XCTAssertEqual(hidden.sidebarVerticalAlignment, .top)
         XCTAssertFalse(hidden.showUngrouped)
-        XCTAssertTrue(hidden.showUngroupedTitle)
         XCTAssertFalse(hidden.showCreateGroup)
 
-        settings.setShowUngroupedTitle(false)
-        XCTAssertFalse(reloaded.showUngroupedTitle)
-        XCTAssertFalse(reloaded.showUngrouped)
         settings.setShowUngrouped(true)
         XCTAssertTrue(reloaded.showUngrouped)
-        XCTAssertFalse(reloaded.showUngroupedTitle)
-        settings.setShowUngroupedTitle(true)
-        settings.setShowUngrouped(false)
-        XCTAssertTrue(reloaded.showUngroupedTitle)
 
         settings.setSidebarVerticalAlignment(.bottom)
         XCTAssertEqual(reloaded.sidebarVerticalAlignment, .bottom)

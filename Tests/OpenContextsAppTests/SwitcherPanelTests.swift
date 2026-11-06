@@ -21,6 +21,14 @@ final class SwitcherPanelTests: XCTestCase {
         switcher = nil
     }
 
+    private func assertShrunkToMinimum(_ frame: NSRect, from original: NSRect,
+                                       file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertEqual(frame.height, 140, "search results did not size the panel", file: file, line: line)
+        XCTAssertEqual(frame.width, original.width, file: file, line: line)
+        XCTAssertEqual(frame.midX, original.midX, file: file, line: line)
+        XCTAssertEqual(frame.midY, original.midY, file: file, line: line)
+    }
+
     private func move(to index: Int, offset: CGFloat = 0) {
         switcher.smokeMove(to: index, pointer: NSPoint(x: switcher.smokeHoverOrigin.x + offset,
                                                        y: switcher.smokeHoverOrigin.y))
@@ -68,7 +76,7 @@ final class SwitcherPanelTests: XCTestCase {
         switcher.update(results: searchResults, selectedIndex: 0, resetHover: true, query: "  " + query + "  ",
                         totalWindowCount: windows.count, language: .zh)
         XCTAssertEqual(searchResults.count, 1)
-        XCTAssertEqual(switcher.frame, originalFrame)
+        assertShrunkToMinimum(switcher.frame, from: originalFrame)
         XCTAssertEqual(switcher.smokeSearchHeader.query, query)
         XCTAssertEqual(switcher.smokeSearchHeader.count, "1 个结果")
         XCTAssertFalse(switcher.smokeSearchHeader.empty)
@@ -78,7 +86,7 @@ final class SwitcherPanelTests: XCTestCase {
         XCTAssertEqual(selectedIDs.count, 2, "search reset did not keep the selection")
 
         switcher.update(results: [], selectedIndex: 0, query: "zzzz", totalWindowCount: windows.count, language: .zh)
-        XCTAssertEqual(switcher.frame, originalFrame)
+        assertShrunkToMinimum(switcher.frame, from: originalFrame)
         XCTAssertTrue(switcher.smokeSearchHeader.empty)
         XCTAssertEqual(switcher.smokeSearchHeader.count, "0 个结果")
         XCTAssertEqual(switcher.smokeHighlightedIndices, [])

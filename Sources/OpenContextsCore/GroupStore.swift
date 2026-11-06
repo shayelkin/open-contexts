@@ -20,6 +20,8 @@ public final class GroupStore: ObservableObject {
     public private(set) var persistenceError: String?
     public private(set) var persistenceErrorOperation: PersistenceErrorOperation?
     public private(set) var persistenceErrorDetail: String?
+    /// Saved windows whose live title or document changed since the last write; see `flushPendingChanges()`.
+    public private(set) var hasPendingChanges = false
 
     private struct SavedWindow: Codable, Equatable {
         let id: String
@@ -94,6 +96,24 @@ public final class GroupStore: ObservableObject {
         restoreBindings(for: uniqueWindows)
         activeWindows = incoming
         updateActiveWindowOrder(uniqueWindows)
+        refreshSavedMetadata(for: uniqueWindows)
+    }
+
+    /// Writes title and document changes picked up by live refreshes, which do not write on their own.
+    public func flushPendingChanges() {
+        guard hasPendingChanges else { return }
+        save()
+    }
+
+    private func refreshSavedMetadata(for windows: [WindowInfo]) {
+        for window in windows {
+            guard let savedID = savedIDByWindowID[window.id], let (groupID, index) = location(of: savedID),
+                  let saved = windowsByGroup[groupID]?[index],
+                  saved.appID != window.appID || saved.title != window.title
+                    || saved.documentURL != window.documentURL else { continue }
+            updateSavedWindow(id: savedID, from: window)
+            if groupID != Self.ungroupedID || saved.pinnedPosition != nil { hasPendingChanges = true }
+        }
     }
 
     private static func deduplicated(_ windows: [WindowInfo]) -> ([String: WindowInfo], [WindowInfo]) {
@@ -523,6 +543,7 @@ public final class GroupStore: ObservableObject {
             persistenceError = nil
             persistenceErrorOperation = nil
             persistenceErrorDetail = nil
+            hasPendingChanges = false
         } catch {
             persistenceError = "无法保存分组数据：\(error.localizedDescription)"
             persistenceErrorOperation = .write

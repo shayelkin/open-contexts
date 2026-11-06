@@ -172,6 +172,35 @@ final class GroupStoreTests: XCTestCase {
         }
     }
 
+    func testLiveTitleChangesOfSavedWindowsAreFlushedAndUsedAfterRestart() throws {
+        let fileURL = temporaryFileURL()
+        let store = GroupStore(fileURL: fileURL)
+        store.reconcile([window("grouped", title: "Inbox (1)"), window("loose", title: "Loose")])
+        store.createGroup(name: "Mail")
+        let mail = try XCTUnwrap(store.groups.last?.id)
+        store.moveWindow(id: "grouped", to: mail)
+        let written = try Data(contentsOf: fileURL)
+
+        store.updateLiveWindows([window("grouped", title: "Inbox (1)"), window("loose", title: "Loose 2")])
+        XCTAssertFalse(store.hasPendingChanges, "an ungrouped title change scheduled a write")
+        store.updateLiveWindows([window("grouped", title: "Inbox (7)", documentURL: "file:///mail"),
+                                 window("loose", title: "Loose 2")])
+        XCTAssertTrue(store.hasPendingChanges)
+        XCTAssertEqual(try Data(contentsOf: fileURL), written, "a live refresh wrote to disk")
+        store.flushPendingChanges()
+        XCTAssertFalse(store.hasPendingChanges)
+        let saved = try persistedWindows(at: fileURL, in: mail)
+        XCTAssertEqual(saved.compactMap { $0["title"] as? String }, ["Inbox (7)"])
+        XCTAssertEqual(saved.compactMap { $0["documentURL"] as? String }, ["file:///mail"])
+        let flushed = try Data(contentsOf: fileURL)
+        store.flushPendingChanges()
+        XCTAssertEqual(try Data(contentsOf: fileURL), flushed)
+
+        let restarted = GroupStore(fileURL: fileURL)
+        restarted.reconcile([window("new", title: "Inbox (7)")])
+        XCTAssertEqual(restarted.windows(in: mail).map(\.id), ["new"])
+    }
+
     func testUngroupedHistoryIsNeverPersistedButGroupedAndPinnedWindowsAre() throws {
         let fileURL = temporaryFileURL()
         for index in 0..<20 {

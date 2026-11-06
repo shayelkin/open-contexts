@@ -16,6 +16,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var cancellables: Set<AnyCancellable> = []
     private var settingsWindow: NSWindow?
     private var statusItem: NSStatusItem?
+    private var groupFlushTimer: Timer?
 
     private var switchingResults: [WindowSearch.Match] = []
     private var switchingWindowCount = 0
@@ -38,14 +39,26 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         rebuildPanels()
         windowService.setIncludeAllSpaces(includesWindowsFromAllDesktops)
         windowService.start()
+        startGroupFlushTimer()
         if !windowService.hasAccessibility { showSettings() }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        groupFlushTimer?.invalidate()
+        groupStore.flushPendingChanges()
         shortcuts.stop()
         windowService.stop()
         sidebars.values.forEach { $0.close() }
         switchers.values.forEach { $0.close() }
+    }
+
+    // Live refreshes only update saved titles in memory; write them out periodically instead of every scan.
+    private func startGroupFlushTimer() {
+        let timer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.groupStore.flushPendingChanges() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        groupFlushTimer = timer
     }
 
     private func configureShortcuts() {

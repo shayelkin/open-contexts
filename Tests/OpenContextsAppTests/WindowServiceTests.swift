@@ -128,15 +128,17 @@ final class WindowServiceTests: XCTestCase {
             WindowService.TrackedWindow(id: id, element: AXUIElementCreateApplication(element),
                                         info: WindowInfo(id: id, appID: "check", appName: "Check", title: id,
                                                          processID: processID),
-                                        frame: frame)
+                                        windowID: CGWindowID(element), frame: frame)
         }
         func resolve(_ frame: CGRect?, windowID: CGWindowID? = 7, listed: [WindowService.TrackedWindow] = [],
                      previous: [WindowService.TrackedWindow], usedIDs: Set<String> = [],
+                     existing: Set<CGWindowID> = Set((9001...9009).map(CGWindowID.init)),
                      pending: Set<CGWindowID> = []) -> (id: String?, deferred: Set<CGWindowID>) {
             var deferred: Set<CGWindowID> = []
             let id = WindowService.newWindowID(frame: frame, windowID: windowID, processID: 1,
                                                listed: listed.map(\.element), previous: previous, usedIDs: usedIDs,
-                                               pendingTabs: pending, deferredTabs: &deferred)
+                                               existingWindowIDs: existing, pendingTabs: pending,
+                                               deferredTabs: &deferred)
             return (id, deferred)
         }
         func assertFresh(_ result: (id: String?, deferred: Set<CGWindowID>), _ message: String,
@@ -169,6 +171,12 @@ final class WindowServiceTests: XCTestCase {
         assertFresh(resolve(frame, previous: [old, twin]), "two vanished siblings")
         assertFresh(resolve(frame, previous: [moved, resized, otherApp, unknown]), "no sibling with the same frame")
         assertFresh(resolve(frame, previous: []), "no previous windows")
+        assertFresh(resolve(frame, previous: [moved, old, unknown, otherApp], existing: [9003, 9005, 9006]),
+                    "the vanished window was closed, not hidden as a tab")
+        assertFresh(resolve(frame, previous: [old], existing: []), "no window exists any more")
+        var noWindowID = old
+        noWindowID.windowID = nil
+        assertFresh(resolve(frame, previous: [noWindowID]), "the vanished window cannot be checked")
         assertFresh(resolve(nil, listed: [unknown], previous: [unknown]), "unknown frame")
         let zero = tab("zero", element: 9008, frame: .zero)
         assertFresh(resolve(.zero, listed: [zero], previous: [zero]), "zero frame")
@@ -442,6 +450,72 @@ final class WindowServiceAccessibilityTests: XCTestCase {
         let focused: AXUIElement? = WindowService.attribute(kAXFocusedWindowAttribute, of: appElement)
         XCTAssertEqual(focused.flatMap(WindowSpaces.windowID), newer.windowID)
         XCTAssertEqual(NSWorkspace.shared.frontmostApplication?.processIdentifier, newer.info.processID)
+    }
+
+    /// The tab ID heuristic relies on a hidden native tab still existing in the window server while a closed
+    /// window does not.
+    func testHiddenNativeTabStillExistsButClosedTabDoesNot() async throws {
+        let bundleID = "com.apple.TextEdit"
+        try XCTSkipIf(!NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty,
+                      "TextEdit is already running; its windows would interfere with the fixture")
+        let appURL = try XCTUnwrap(NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID))
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        documents.append(directory)
+        let files = try (0..<2).map { index in
+            let file = directory.appendingPathComponent("tab-\(index).txt")
+            try Data().write(to: file)
+            return file
+        }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.arguments = ["-AppleWindowTabbingMode", "always"]
+        let app = try await NSWorkspace.shared.open(files, withApplicationAt: appURL, configuration: configuration)
+        launchedApps.append(app)
+        let appElement = AXUIElementCreateApplication(app.processIdentifier)
+
+        func listedWindowIDs() -> Set<CGWindowID> {
+            let windows: [AXUIElement] = WindowService.attribute(kAXWindowsAttribute, of: appElement) ?? []
+            return Set(windows.compactMap(WindowSpaces.windowID))
+        }
+        func tabs() -> [AXUIElement] {
+            let windows: [AXUIElement] = WindowService.attribute(kAXWindowsAttribute, of: appElement) ?? []
+            return windows.flatMap { window -> [AXUIElement] in
+                let children: [AXUIElement] = WindowService.attribute(kAXChildrenAttribute, of: window) ?? []
+                let groups = children.filter { WindowService.attribute(kAXRoleAttribute, of: $0) == kAXTabGroupRole }
+                return groups.flatMap { group -> [AXUIElement] in
+                    let items: [AXUIElement] = WindowService.attribute(kAXChildrenAttribute, of: group) ?? []
+                    return items.filter { WindowService.attribute(kAXRoleAttribute, of: $0) == kAXRadioButtonRole }
+                }
+            }
+        }
+        func waitFor(_ condition: () -> Bool) async throws -> Bool {
+            for _ in 0..<100 where !condition() { try await Task.sleep(for: .milliseconds(50)) }
+            return condition()
+        }
+
+        func hiddenTab() -> AXUIElement? {
+            tabs().first { (WindowService.attribute(kAXValueAttribute, of: $0) as NSNumber?)?.boolValue == false }
+        }
+        let tabsAppeared = try await waitFor {
+            tabs().count == 2 && listedWindowIDs().count == 1 && hiddenTab() != nil
+        }
+        XCTAssertTrue(tabsAppeared, "TextEdit did not open the documents as two tabs")
+        let first = try XCTUnwrap(listedWindowIDs().first)
+        let hidden = try XCTUnwrap(hiddenTab())
+        XCTAssertEqual(AXUIElementPerformAction(hidden, kAXPressAction as CFString), .success)
+        let switched = try await waitFor { listedWindowIDs().count == 1 && listedWindowIDs().first != first }
+        XCTAssertTrue(switched, "selecting the other tab did not change the listed window")
+        let second = try XCTUnwrap(listedWindowIDs().first)
+        XCTAssertTrue(WindowService.existingWindowIDs().contains(first), "a hidden tab left the window server")
+        XCTAssertTrue(WindowService.existingWindowIDs().contains(second))
+
+        let windows: [AXUIElement] = try XCTUnwrap(WindowService.attribute(kAXWindowsAttribute, of: appElement))
+        let closeButton: AXUIElement = try XCTUnwrap(WindowService.attribute(kAXCloseButtonAttribute,
+                                                                              of: try XCTUnwrap(windows.first)))
+        XCTAssertEqual(AXUIElementPerformAction(closeButton, kAXPressAction as CFString), .success)
+        let closed = try await waitFor { !WindowService.existingWindowIDs().contains(second) }
+        XCTAssertTrue(closed, "a closed tab still exists in the window server")
+        XCTAssertTrue(WindowService.existingWindowIDs().contains(first))
     }
 
     /// Opens `documentCount` blank TextEdit documents and returns a service tracking exactly those windows.

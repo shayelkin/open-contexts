@@ -380,6 +380,7 @@ final class WindowService: ObservableObject {
         var focusedElement: AXUIElement?
         var usedIDs: Set<String> = []
         let topology = WindowSpaces.query()
+        let existingWindowIDs = Self.existingWindowIDs()
         var discoveryState = discoveries.filter { pid, _ in applications.contains { $0.processID == pid } }
         for pid in Array(discoveryState.keys) {
             guard var state = discoveryState[pid] else { continue }
@@ -554,7 +555,7 @@ final class WindowService: ObservableObject {
                 guard let id = existing?.id ?? newWindowID(
                     frame: windowFrame, windowID: windowID, processID: application.processID,
                     listed: appWindows, previous: previous, usedIDs: usedIDs,
-                    pendingTabs: pendingTabs, deferredTabs: &deferredTabs
+                    existingWindowIDs: existingWindowIDs, pendingTabs: pendingTabs, deferredTabs: &deferredTabs
                 ) else { continue }
                 usedIDs.insert(id)
                 discovered.append(TrackedWindow(
@@ -602,25 +603,33 @@ final class WindowService: ObservableObject {
     /// looks like one window closing and a new one opening. With a new ID, the sidebar would drop the
     /// row and append the new one at the end of its group.
     /// Instead, a new window inherits the ID of the one window of the same app that stopped being
-    /// listed if it had exactly the same frame.
+    /// listed if it had exactly the same frame and still exists in the window server, as a hidden tab
+    /// does. A window that was closed no longer exists, so a new window never takes over its ID.
     ///
     /// Switching tabs is not atomic: we can briefly, have both listed. To work around that, the new
     /// window is held back for one scan.
     nonisolated static func newWindowID(
         frame: CGRect?, windowID: CGWindowID?, processID: pid_t, listed: [AXUIElement],
-        previous: [TrackedWindow], usedIDs: Set<String>, pendingTabs: Set<CGWindowID>,
-        deferredTabs: inout Set<CGWindowID>
+        previous: [TrackedWindow], usedIDs: Set<String>, existingWindowIDs: Set<CGWindowID>,
+        pendingTabs: Set<CGWindowID>, deferredTabs: inout Set<CGWindowID>
     ) -> String? {
         guard let frame, !frame.isEmpty else { return UUID().uuidString }
         let siblings = previous.filter { $0.info.processID == processID && $0.frame == frame }
         let isListed = { (sibling: TrackedWindow) in listed.contains { CFEqual($0, sibling.element) } }
-        let vanished = siblings.filter { !usedIDs.contains($0.id) && !isListed($0) }
+        let vanished = siblings.filter {
+            !usedIDs.contains($0.id) && !isListed($0) && $0.windowID.map(existingWindowIDs.contains) == true
+        }
         if vanished.count == 1 { return vanished[0].id }
         guard let windowID, !pendingTabs.contains(windowID), siblings.contains(where: isListed) else {
             return UUID().uuidString
         }
         deferredTabs.insert(windowID)
         return nil
+    }
+
+    nonisolated static func existingWindowIDs() -> Set<CGWindowID> {
+        let windows = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] ?? []
+        return Set(windows.compactMap { ($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value })
     }
 
     nonisolated static func scanDockBadges(processID: pid_t) -> [String: DockBadgeRead]? {

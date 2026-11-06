@@ -555,7 +555,8 @@ final class WindowService: ObservableObject {
                 guard let id = existing?.id ?? newWindowID(
                     frame: windowFrame, windowID: windowID, processID: application.processID,
                     listed: appWindows, previous: previous, usedIDs: usedIDs,
-                    existingWindowIDs: existingWindowIDs, pendingTabs: pendingTabs, deferredTabs: &deferredTabs
+                    existingWindowIDs: existingWindowIDs, isTabbed: { isInTabGroup(element) },
+                    pendingTabs: pendingTabs, deferredTabs: &deferredTabs
                 ) else { continue }
                 usedIDs.insert(id)
                 discovered.append(TrackedWindow(
@@ -603,15 +604,16 @@ final class WindowService: ObservableObject {
     /// looks like one window closing and a new one opening. With a new ID, the sidebar would drop the
     /// row and append the new one at the end of its group.
     /// Instead, a new window inherits the ID of the one window of the same app that stopped being
-    /// listed if it had exactly the same frame and still exists in the window server, as a hidden tab
-    /// does. A window that was closed no longer exists, so a new window never takes over its ID.
+    /// listed if it had exactly the same frame, still exists in the window server as a hidden tab does,
+    /// and the new window is itself in a native tab group. A closed window can linger in the window
+    /// server until its app's run loop cycles, so existence alone does not tell it from a hidden tab.
     ///
     /// Switching tabs is not atomic: we can briefly, have both listed. To work around that, the new
     /// window is held back for one scan.
     nonisolated static func newWindowID(
         frame: CGRect?, windowID: CGWindowID?, processID: pid_t, listed: [AXUIElement],
         previous: [TrackedWindow], usedIDs: Set<String>, existingWindowIDs: Set<CGWindowID>,
-        pendingTabs: Set<CGWindowID>, deferredTabs: inout Set<CGWindowID>
+        isTabbed: () -> Bool, pendingTabs: Set<CGWindowID>, deferredTabs: inout Set<CGWindowID>
     ) -> String? {
         guard let frame, !frame.isEmpty else { return UUID().uuidString }
         let siblings = previous.filter { $0.info.processID == processID && $0.frame == frame }
@@ -619,12 +621,21 @@ final class WindowService: ObservableObject {
         let vanished = siblings.filter {
             !usedIDs.contains($0.id) && !isListed($0) && $0.windowID.map(existingWindowIDs.contains) == true
         }
-        if vanished.count == 1 { return vanished[0].id }
+        if vanished.count == 1, isTabbed() { return vanished[0].id }
         guard let windowID, !pendingTabs.contains(windowID), siblings.contains(where: isListed) else {
             return UUID().uuidString
         }
         deferredTabs.insert(windowID)
         return nil
+    }
+
+    nonisolated static func isInTabGroup(_ window: AXUIElement) -> Bool {
+        let children: [AXUIElement] = attribute(kAXChildrenAttribute, of: window) ?? []
+        return children.contains { child in
+            guard attribute(kAXRoleAttribute, of: child) == kAXTabGroupRole else { return false }
+            let items: [AXUIElement] = attribute(kAXChildrenAttribute, of: child) ?? []
+            return items.filter { attribute(kAXRoleAttribute, of: $0) == kAXRadioButtonRole }.count >= 2
+        }
     }
 
     nonisolated static func existingWindowIDs() -> Set<CGWindowID> {

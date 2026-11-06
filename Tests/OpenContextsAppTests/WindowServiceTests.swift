@@ -132,12 +132,12 @@ final class WindowServiceTests: XCTestCase {
         }
         func resolve(_ frame: CGRect?, windowID: CGWindowID? = 7, listed: [WindowService.TrackedWindow] = [],
                      previous: [WindowService.TrackedWindow], usedIDs: Set<String> = [],
-                     existing: Set<CGWindowID> = Set((9001...9009).map(CGWindowID.init)),
+                     existing: Set<CGWindowID> = Set((9001...9009).map(CGWindowID.init)), tabbed: Bool = true,
                      pending: Set<CGWindowID> = []) -> (id: String?, deferred: Set<CGWindowID>) {
             var deferred: Set<CGWindowID> = []
             let id = WindowService.newWindowID(frame: frame, windowID: windowID, processID: 1,
                                                listed: listed.map(\.element), previous: previous, usedIDs: usedIDs,
-                                               existingWindowIDs: existing, pendingTabs: pending,
+                                               existingWindowIDs: existing, isTabbed: { tabbed }, pendingTabs: pending,
                                                deferredTabs: &deferred)
             return (id, deferred)
         }
@@ -174,6 +174,7 @@ final class WindowServiceTests: XCTestCase {
         assertFresh(resolve(frame, previous: [moved, old, unknown, otherApp], existing: [9003, 9005, 9006]),
                     "the vanished window was closed, not hidden as a tab")
         assertFresh(resolve(frame, previous: [old], existing: []), "no window exists any more")
+        assertFresh(resolve(frame, previous: [old], tabbed: false), "the new window is not a tab")
         var noWindowID = old
         noWindowID.windowID = nil
         assertFresh(resolve(frame, previous: [noWindowID]), "the vanished window cannot be checked")
@@ -452,9 +453,9 @@ final class WindowServiceAccessibilityTests: XCTestCase {
         XCTAssertEqual(NSWorkspace.shared.frontmostApplication?.processIdentifier, newer.info.processID)
     }
 
-    /// The tab ID heuristic relies on a hidden native tab still existing in the window server while a closed
-    /// window does not.
-    func testHiddenNativeTabStillExistsButClosedTabDoesNot() async throws {
+    /// The tab ID heuristic relies on a hidden native tab still existing in the window server and on the
+    /// selected tab exposing a tab group that a lone window does not.
+    func testHiddenNativeTabExistsAndTabsExposeATabGroup() async throws {
         let bundleID = "com.apple.TextEdit"
         try XCTSkipIf(!NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty,
                       "TextEdit is already running; its windows would interfere with the fixture")
@@ -494,7 +495,7 @@ final class WindowServiceAccessibilityTests: XCTestCase {
         }
 
         func hiddenTab() -> AXUIElement? {
-            tabs().first { (WindowService.attribute(kAXValueAttribute, of: $0) as NSNumber?)?.boolValue == false }
+            tabs().first { (WindowService.attribute(kAXValueAttribute, of: $0) as NSNumber?)?.boolValue != true }
         }
         let tabsAppeared = try await waitFor {
             tabs().count == 2 && listedWindowIDs().count == 1 && hiddenTab() != nil
@@ -510,12 +511,14 @@ final class WindowServiceAccessibilityTests: XCTestCase {
         XCTAssertTrue(WindowService.existingWindowIDs().contains(second))
 
         let windows: [AXUIElement] = try XCTUnwrap(WindowService.attribute(kAXWindowsAttribute, of: appElement))
-        let closeButton: AXUIElement = try XCTUnwrap(WindowService.attribute(kAXCloseButtonAttribute,
-                                                                              of: try XCTUnwrap(windows.first)))
+        let tabbed = try XCTUnwrap(windows.first)
+        XCTAssertTrue(WindowService.isInTabGroup(tabbed))
+        let closeButton: AXUIElement = try XCTUnwrap(WindowService.attribute(kAXCloseButtonAttribute, of: tabbed))
         XCTAssertEqual(AXUIElementPerformAction(closeButton, kAXPressAction as CFString), .success)
-        let closed = try await waitFor { !WindowService.existingWindowIDs().contains(second) }
-        XCTAssertTrue(closed, "a closed tab still exists in the window server")
-        XCTAssertTrue(WindowService.existingWindowIDs().contains(first))
+        let closed = try await waitFor { listedWindowIDs() == [first] }
+        XCTAssertTrue(closed, "closing the selected tab did not reveal the other one")
+        let remaining: [AXUIElement] = try XCTUnwrap(WindowService.attribute(kAXWindowsAttribute, of: appElement))
+        XCTAssertFalse(WindowService.isInTabGroup(try XCTUnwrap(remaining.first)), "a lone window counted as a tab")
     }
 
     /// Opens `documentCount` blank TextEdit documents and returns a service tracking exactly those windows.

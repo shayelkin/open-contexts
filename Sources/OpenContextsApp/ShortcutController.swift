@@ -98,9 +98,20 @@ struct ShortcutState {
 
     mutating func appendToSearch(_ characters: String) -> SwitcherAction? {
         guard isSwitching, !characters.isEmpty,
-              characters.unicodeScalars.allSatisfy({ (32...126).contains($0.value) }) else { return nil }
+              characters.unicodeScalars.allSatisfy(Self.isSearchable) else { return nil }
         searchQuery += characters
         return .search(searchQuery)
+    }
+
+    /// Text from any keyboard layout; rejects control characters and the private-use code points AppKit
+    /// reports for function and arrow keys.
+    static func isSearchable(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.properties.generalCategory {
+        case .control, .format, .privateUse, .surrogate, .unassigned, .lineSeparator, .paragraphSeparator:
+            return false
+        default:
+            return true
+        }
     }
 
     mutating func deleteFromSearch() -> SwitcherAction? {

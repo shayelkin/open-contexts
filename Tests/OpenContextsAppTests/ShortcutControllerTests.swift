@@ -159,7 +159,8 @@ final class ShortcutControllerTests: XCTestCase {
         XCTAssertEqual(controller.keyAction(keyCode: 49, flags: .maskCommand, characters: " "), .search("wqC "))
         XCTAssertEqual(controller.keyAction(keyCode: 51, flags: .maskCommand), .search("wqC"))
         XCTAssertEqual(controller.keyAction(keyCode: 48, flags: [.maskCommand, .maskShift]), .step(-1))
-        XCTAssertNil(controller.keyAction(keyCode: 0, flags: .maskCommand, characters: "中"))
+        XCTAssertEqual(controller.keyAction(keyCode: 0, flags: .maskCommand, characters: "中"), .search("wqC中"))
+        XCTAssertEqual(controller.keyAction(keyCode: 51, flags: .maskCommand), .search("wqC"))
         XCTAssertNil(controller.keyAction(keyCode: 122, flags: .maskCommand, characters: "\u{f704}"))
         XCTAssertEqual(controller.modifierAction(flags: []), .commit)
         XCTAssertTrue(controller.state.searchQuery.isEmpty)
@@ -196,5 +197,30 @@ final class ShortcutControllerTests: XCTestCase {
         XCTAssertFalse(CFMachPortIsValid(stoppedTap))
         XCTAssertTrue(stopped.start(), "a stopped controller could not start again")
         stopped.stop()
+    }
+
+    func testSearchAcceptsTextFromAnyLayoutButNotControlOrFunctionKeys() {
+        for text in ["ж", "é", "日本", "ש", " ", "a b", "😀", "ß"] {
+            var state = ShortcutState()
+            _ = state.begin(currentAppOnly: false, reverse: false, allowed: true)
+            XCTAssertEqual(state.appendToSearch(text), .search(text), text)
+        }
+        for text in ["\t", "\r", "\u{7F}", "\u{1B}", "\u{F700}", "\u{F728}", "a\u{F701}", "\u{200B}", ""] {
+            var state = ShortcutState()
+            _ = state.begin(currentAppOnly: false, reverse: false, allowed: true)
+            XCTAssertNil(state.appendToSearch(text), text.unicodeScalars.map { String($0.value, radix: 16) }.joined())
+        }
+        var random = SystemRandomNumberGenerator()
+        for _ in 0..<5_000 {
+            guard let scalar = Unicode.Scalar(UInt32.random(in: 0...0x10FFFF, using: &random)) else { continue }
+            var state = ShortcutState()
+            _ = state.begin(currentAppOnly: false, reverse: false, allowed: true)
+            let rejected: Set<Unicode.GeneralCategory> = [.control, .format, .privateUse, .surrogate, .unassigned,
+                                                          .lineSeparator, .paragraphSeparator]
+            XCTAssertEqual(state.appendToSearch(String(scalar)) != nil,
+                           !rejected.contains(scalar.properties.generalCategory), String(scalar.value, radix: 16))
+        }
+        var idle = ShortcutState()
+        XCTAssertNil(idle.appendToSearch("ж"), "search text was accepted while not switching")
     }
 }

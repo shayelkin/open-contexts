@@ -204,6 +204,25 @@ final class WindowServiceTests: XCTestCase {
                        WindowService.discoveryIndex(pass: Int.min, count: 3))
     }
 
+    func testDesktopsAreNumberedPerDisplayWithoutFullScreenSpaces() {
+        let displays: [[String: Any]] = [
+            ["Current Space": ["id64": NSNumber(value: 12)],
+             "Spaces": [["id64": NSNumber(value: 11), "type": 0], ["id64": NSNumber(value: 12), "type": 4],
+                        ["id64": NSNumber(value: 13), "type": 0], ["type": 0]]],
+            ["Current Space": ["id64": NSNumber(value: 22)],
+             "Spaces": [["id64": NSNumber(value: 21), "type": 4], ["id64": NSNumber(value: 22), "type": 0],
+                        ["id64": NSNumber(value: 23), "type": 0]]],
+            ["Spaces": "not a list"]
+        ]
+        let spaces = WindowSpaces.spaces(fromDisplays: displays)
+        XCTAssertEqual(spaces.map(\.id), [11, 12, 13, 21, 22, 23])
+        XCTAssertEqual(spaces.map(\.index), [1, 2, 3, 4, 5, 6])
+        XCTAssertEqual(spaces.map(\.desktopNumber), [1, nil, 2, nil, 1, 2])
+        XCTAssertEqual(spaces.map(\.isFullscreen), [false, true, false, true, false, false])
+        XCTAssertEqual(spaces.filter(\.isCurrent).map(\.id), [12, 22])
+        XCTAssertEqual(WindowSpaces.spaces(fromDisplays: []), [])
+    }
+
     func testPrivateAPIResultsAreTypeChecked() {
         XCTAssertNil(WindowSpaces.array(nil))
         XCTAssertNil(WindowSpaces.array(Unmanaged.passRetained("text" as CFString)))

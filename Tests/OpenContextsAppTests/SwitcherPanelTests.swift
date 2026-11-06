@@ -141,5 +141,15 @@ final class SwitcherPanelTests: XCTestCase {
         XCTAssertEqual(switcher.smokeHighlightedIndices, [0])
         switcher.update(results: grouped, selectedIndex: 0, groupBySpace: false)
         XCTAssertEqual(switcher.smokeSpaceHeaders, [])
+
+        let labelled = [
+            WindowInfo(id: "desktop", appID: "Editor", appName: "Editor", title: "Doc", processID: 0,
+                       space: WindowSpace(id: 3, index: 3, isCurrent: false, desktopNumber: 2)),
+            WindowInfo(id: "fullscreen", appID: "Player", appName: "Player", title: "Movie", processID: 0,
+                       space: WindowSpace(id: 4, index: 4, isCurrent: false, isFullscreen: true))
+        ]
+        switcher.update(results: WindowSwitcher.filter(labelled, query: "", allSpaces: true), selectedIndex: 0,
+                        groupBySpace: true, language: .en)
+        XCTAssertEqual(switcher.smokeSpaceHeaders, ["Desktop 2", "Full screen Player"])
     }
 }

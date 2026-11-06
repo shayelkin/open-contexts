@@ -65,20 +65,13 @@ enum WindowSpaces {
     static func query() -> Snapshot? {
         guard let api, let displays = array(api.displays(api.connection())) as? [[String: Any]],
               !displays.isEmpty else { return nil }
-        var spaces: [WindowSpace] = []
+        let spaces = spaces(fromDisplays: displays)
         var membership: [CGWindowID: [WindowSpace]] = [:]
-        for display in displays {
-            let current = (display["Current Space"] as? [String: Any])?["id64"] as? NSNumber
-            for raw in display["Spaces"] as? [[String: Any]] ?? [] {
-                guard let id = raw["id64"] as? NSNumber else { continue }
-                let space = WindowSpace(id: id.uint64Value, index: spaces.count + 1,
-                                        isCurrent: id == current, isFullscreen: (raw["type"] as? Int) == 4)
-                spaces.append(space)
-                var setTags: UInt64 = 0, clearTags: UInt64 = 0
-                let ids = array(api.windows(api.connection(), 0, [id] as CFArray, 7, &setTags, &clearTags))
-                    as? [NSNumber] ?? []
-                for window in ids { membership[window.uint32Value, default: []].append(space) }
-            }
+        for space in spaces {
+            var setTags: UInt64 = 0, clearTags: UInt64 = 0
+            let ids = array(api.windows(api.connection(), 0, [NSNumber(value: space.id)] as CFArray, 7,
+                                        &setTags, &clearTags)) as? [NSNumber] ?? []
+            for window in ids { membership[window.uint32Value, default: []].append(space) }
         }
         guard !spaces.isEmpty else { return nil }
         var owners: [CGWindowID: pid_t] = [:]
@@ -96,6 +89,24 @@ enum WindowSpaces {
     /// Remote element IDs are per-process counters (a few dozen in practice). Past this bound the remaining
     /// targets count as unresolvable until the targets change, instead of being probed on every scan forever.
     static let maxElementID: UInt64 = 10_000
+
+    /// Spaces in Mission Control order. `index` orders all of them; `desktopNumber` counts only desktops on
+    /// each display, as Mission Control labels them, and is nil for full-screen spaces.
+    static func spaces(fromDisplays displays: [[String: Any]]) -> [WindowSpace] {
+        var spaces: [WindowSpace] = []
+        for display in displays {
+            let current = (display["Current Space"] as? [String: Any])?["id64"] as? NSNumber
+            var desktops = 0
+            for raw in display["Spaces"] as? [[String: Any]] ?? [] {
+                guard let id = raw["id64"] as? NSNumber else { continue }
+                let isFullscreen = (raw["type"] as? Int) == 4
+                if !isFullscreen { desktops += 1 }
+                spaces.append(WindowSpace(id: id.uint64Value, index: spaces.count + 1, isCurrent: id == current,
+                                          isFullscreen: isFullscreen, desktopNumber: isFullscreen ? nil : desktops))
+            }
+        }
+        return spaces
+    }
 
     static func discoverWindows(pid: pid_t, targets: Set<CGWindowID>, state: inout DiscoveryState,
                                 maxElementID: UInt64 = WindowSpaces.maxElementID) -> [AXUIElement] {

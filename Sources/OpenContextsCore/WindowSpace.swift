@@ -5,12 +5,15 @@ public struct WindowSpace: Equatable, Sendable {
     public let index: Int
     public let isCurrent: Bool
     public let isFullscreen: Bool
+    /// The number Mission Control shows for a desktop on its display; nil for full-screen spaces.
+    public let desktopNumber: Int?
 
-    public init(id: UInt64, index: Int, isCurrent: Bool, isFullscreen: Bool = false) {
+    public init(id: UInt64, index: Int, isCurrent: Bool, isFullscreen: Bool = false, desktopNumber: Int? = nil) {
         self.id = id
         self.index = index
         self.isCurrent = isCurrent
         self.isFullscreen = isFullscreen
+        self.desktopNumber = desktopNumber
     }
 }
 

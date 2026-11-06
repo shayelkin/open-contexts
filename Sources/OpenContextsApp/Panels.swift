@@ -1199,7 +1199,9 @@ final class SwitcherPanel: NSPanel {
             if groupBySpace, index == 0 || previousSpaceID != window.space?.id {
                 let title: String
                 if let space = window.space {
-                    title = L10n.format(space.isFullscreen ? "Full screen %@" : "Desktop %@", String(space.index), language: language)
+                    title = space.isFullscreen
+                        ? L10n.format("Full screen %@", window.appName, language: language)
+                        : L10n.format("Desktop %@", String(space.desktopNumber ?? space.index), language: language)
                         + (space.isCurrent ? " · " + L10n.text("Current", language: language) : "")
                 } else {
                     title = L10n.text("Current desktop", language: language)

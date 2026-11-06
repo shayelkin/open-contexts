@@ -261,4 +261,57 @@ final class ShortcutControllerTests: XCTestCase {
             XCTAssertFalse(shortcut.matches(keyCode: keyCode, flags: [.maskAlternate, .maskCommand]))
         }
     }
+
+    private func trustedController() -> ShortcutController {
+        let controller = ShortcutController()
+        controller.isTrusted = { true }
+        controller.onAction = { _ in }
+        return controller
+    }
+
+    private func keyDown(_ keyCode: CGKeyCode, flags: CGEventFlags) throws -> CGEvent {
+        let event = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true))
+        event.flags = flags
+        return event
+    }
+
+    func testEventTapSwallowsExactlyWhatTheControllerConsumes() throws {
+        let controller = trustedController()
+        let commandTab = try keyDown(48, flags: .maskCommand)
+        XCTAssertNil(ShortcutTapContext(controller).respond(type: .keyDown, event: commandTab),
+                     "⌘Tab reached the system switcher too")
+        XCTAssertTrue(controller.state.isSwitching)
+        let other = trustedController()
+        let plain = try keyDown(0, flags: [])
+        XCTAssertTrue(ShortcutTapContext(other).respond(type: .keyDown, event: plain)?.takeUnretainedValue() === plain)
+
+        var random = SystemRandomNumberGenerator()
+        let modifiers: [CGEventFlags] = [.maskCommand, .maskControl, .maskAlternate, .maskShift]
+        for _ in 0..<2_000 {
+            let keyCode = CGKeyCode.random(in: 0..<128, using: &random)
+            let flags = modifiers.filter { _ in Bool.random(using: &random) }
+                .reduce(into: CGEventFlags()) { $0.insert($1) }
+            let viaTap = trustedController()
+            let direct = trustedController()
+            let context = ShortcutTapContext(viaTap)
+            for type in [CGEventType.flagsChanged, .keyDown] {
+                let event = try keyDown(keyCode, flags: flags)
+                let tapResult = context.respond(type: type, event: event)
+                let directResult = direct.handle(type: type, event: event)
+                let message = "key \(keyCode), flags \(flags.rawValue), type \(type.rawValue)"
+                XCTAssertEqual(tapResult == nil, directResult == nil, message)
+                if let tapResult { XCTAssertTrue(tapResult.takeUnretainedValue() === event, message) }
+            }
+            XCTAssertEqual(viaTap.state.isSwitching, direct.state.isSwitching)
+        }
+    }
+
+    func testEventTapPassesEventsThroughOnceItsControllerIsReleased() throws {
+        var controller: ShortcutController? = trustedController()
+        let context = ShortcutTapContext(try XCTUnwrap(controller))
+        controller = nil
+        XCTAssertNil(context.controller)
+        let commandTab = try keyDown(48, flags: .maskCommand)
+        XCTAssertTrue(context.respond(type: .keyDown, event: commandTab)?.takeUnretainedValue() === commandTab)
+    }
 }

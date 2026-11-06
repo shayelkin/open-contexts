@@ -148,6 +148,7 @@ final class ShortcutController: ObservableObject {
     private(set) var state = ShortcutState()
     private(set) var recordingMonitor: Any?
     private var saveRecording: ((KeyboardShortcut) -> Bool)?
+    var isTrusted: () -> Bool = { AXIsProcessTrusted() }
 
     deinit {
         if let runLoopSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes) }
@@ -268,17 +269,17 @@ final class ShortcutController: ObservableObject {
         _ = state.finish(commit: false)
     }
 
-    fileprivate func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+    func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let action = state.finish(commit: false) { emit(action, deferred: true) }
             emit(.dismissSidebar, deferred: true)
-            if AXIsProcessTrusted(), let eventTap {
+            if isTrusted(), let eventTap {
                 CGEvent.tapEnable(tap: eventTap, enable: true)
             }
             return Unmanaged.passUnretained(event)
         }
 
-        guard AXIsProcessTrusted() else {
+        guard isTrusted() else {
             if let action = state.finish(commit: false) { emit(action, deferred: true) }
             emit(.dismissSidebar, deferred: true)
             isRunning = false
@@ -406,18 +407,23 @@ final class ShortcutController: ObservableObject {
     }
 }
 
-private final class ShortcutTapContext {
+final class ShortcutTapContext {
     weak var controller: ShortcutController?
 
     init(_ controller: ShortcutController) {
         self.controller = controller
+    }
+
+    /// A nil result swallows the event, so it must not be coalesced with the released-controller case.
+    @MainActor
+    func respond(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+        guard let controller else { return Unmanaged.passUnretained(event) }
+        return controller.handle(type: type, event: event)
     }
 }
 
 private let shortcutEventCallback: CGEventTapCallBack = { _, type, event, userInfo in
     guard let userInfo else { return Unmanaged.passUnretained(event) }
     let context = Unmanaged<ShortcutTapContext>.fromOpaque(userInfo).takeUnretainedValue()
-    return MainActor.assumeIsolated {
-        context.controller?.handle(type: type, event: event) ?? Unmanaged.passUnretained(event)
-    }
+    return MainActor.assumeIsolated { context.respond(type: type, event: event) }
 }

@@ -361,6 +361,19 @@ final class WindowServiceAccessibilityTests: XCTestCase {
         documents.forEach { try? FileManager.default.removeItem(at: $0) }
     }
 
+    private struct FixtureAppAlreadyRunning: Error, CustomStringConvertible {
+        let bundleID: String
+        var description: String {
+            "\(bundleID) is already running; quit it before running the tests, since its windows would interfere with the fixture"
+        }
+    }
+
+    private func requireNotRunning(_ bundleID: String) throws {
+        guard NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty else {
+            throw FixtureAppAlreadyRunning(bundleID: bundleID)
+        }
+    }
+
     private func waitUntilTerminated(_ app: NSRunningApplication) async throws -> Bool {
         for _ in 0..<100 where !app.isTerminated {
             try await Task.sleep(for: .milliseconds(50))
@@ -374,7 +387,8 @@ final class WindowServiceAccessibilityTests: XCTestCase {
         XCTAssertFalse(reads.isEmpty)
     }
 
-    func testSpacesInventoryResolvesWindowsOnOtherSpaces() throws {
+    func testSpacesInventoryResolvesWindowsOnOtherSpaces() async throws {
+        let (_, fixture) = try await activationFixture(documentCount: 1)
         let topology = try XCTUnwrap(WindowSpaces.query())
         let ownPID = ProcessInfo.processInfo.processIdentifier
         let applications = NSWorkspace.shared.runningApplications.compactMap { app -> WindowService.ApplicationSnapshot? in
@@ -396,7 +410,7 @@ final class WindowServiceAccessibilityTests: XCTestCase {
             pendingTabs = result.pendingTabs
         }
         XCTAssertFalse(topology.spaces.filter(\.isCurrent).isEmpty)
-        XCTAssertFalse(previous.isEmpty)
+        XCTAssertTrue(previous.contains { $0.windowID == fixture.windowID }, "the scan missed the fixture window")
         let listed = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] ?? []
         let ownerByWindowID = Dictionary(listed.compactMap { info -> (CGWindowID, pid_t)? in
             guard let id = (info[kCGWindowNumber as String] as? NSNumber)?.uint32Value,
@@ -546,8 +560,7 @@ final class WindowServiceAccessibilityTests: XCTestCase {
     /// selected tab exposing a tab group that a lone window does not.
     func testHiddenNativeTabExistsAndTabsExposeATabGroup() async throws {
         let bundleID = "com.apple.TextEdit"
-        try XCTSkipIf(!NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty,
-                      "TextEdit is already running; its windows would interfere with the fixture")
+        try requireNotRunning(bundleID)
         let appURL = try XCTUnwrap(NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID))
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -613,8 +626,7 @@ final class WindowServiceAccessibilityTests: XCTestCase {
     /// Opens `documentCount` blank TextEdit documents and returns a service tracking exactly those windows.
     private func activationFixture(documentCount: Int) async throws -> (WindowService, WindowService.TrackedWindow) {
         let bundleID = "com.apple.TextEdit"
-        try XCTSkipIf(!NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty,
-                      "TextEdit is already running; its windows would interfere with the fixture")
+        try requireNotRunning(bundleID)
         let appURL = try XCTUnwrap(NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID))
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

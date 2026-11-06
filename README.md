@@ -22,10 +22,14 @@ xcodebuild -project OpenContexts.xcodeproj -scheme OpenContexts -configuration R
 
 Run the tests with `swift test`.
 
-Some tests verify windows activation, and could fail if another app takes focus while they run (for
-example, because the user is doing some work while the tests run in the background). To avoid that,
-leave the machine idle while the tests run, or at least rerun those tests on their own with `swift
-test --filter testActivation`.
+#### Known Issues
+
+- Tests that verify windows activation could fail if another app takes focus while they run
+  (for example, because the user is doing some work while the tests run in the background). Leave
+  the machine idle while the tests run.
+
+- Tests that open TextEdit windows as fixtures fail if TextEdit is already running, since its
+  existing windows would interfere with them. Quit TextEdit before running the tests.
 
 
 ## Acknowledging AI Use

@@ -50,7 +50,7 @@ struct KeyboardShortcut: Codable, Equatable {
             109: 10, 103: 11, 111: 12, 105: 13, 107: 14, 113: 15, 106: 16, 64: 17, 79: 18, 80: 19, 90: 20
         ]
         let label = names[event.keyCode] ?? functionKeys[event.keyCode].map { "F\($0)" }
-            ?? event.characters(byApplyingModifiers: [])?.uppercased() ?? ""
+            ?? event.charactersIgnoringModifiers?.uppercased() ?? ""
         self.init(keyCode: event.keyCode, modifiers: flags.intersection(Self.modifierMask), keyLabel: label)
         guard isValid else { return nil }
     }
@@ -308,7 +308,7 @@ final class ShortcutController: ObservableObject {
     }
 
     static func searchCharacters(_ event: NSEvent) -> String? {
-        event.characters(byApplyingModifiers: event.modifierFlags.intersection([.shift, .capsLock]))
+        event.charactersIgnoringModifiers
     }
 
     func keyAction(keyCode: UInt16, flags: CGEventFlags, characters: String? = nil) -> SwitcherAction? {

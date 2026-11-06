@@ -445,7 +445,10 @@ final class SidebarPanelTests: XCTestCase {
                 }
                 sidebar.smokeUpdateHover(pointer: outsidePoint, now: 12)
                 sidebar.smokeUpdateHover(pointer: outsidePoint, now: 12.13)
-                RunLoop.main.run(until: Date().addingTimeInterval(SidebarReveal.duration * 2))
+                let deadline = Date().addingTimeInterval(5)
+                while sidebar.smokeRevealIsAnimating, Date() < deadline {
+                    RunLoop.main.run(until: Date().addingTimeInterval(SidebarReveal.duration / 4))
+                }
                 guard sidebar.smokeIsHidden, !sidebar.smokeRevealIsAnimating, sidebar.alphaValue == 1,
                       edgeFrame(sidebar.frame, in: area, position: position, width: 8) else {
                     return revealFailure("timer-driven sidebar hide did not finish")

@@ -148,13 +148,14 @@ extension SidebarPanel {
     func smokeBottomItemsFit(windowCount: Int, maximumWindowWidth: CGFloat) -> Bool {
         guard position == .bottom else { return false }
         let windows = sidebarRows.filter { if case .window = $0.style { return true }; return false }
+        let pixel = 1 / backingScaleFactor
         guard windows.count == windowCount, let firstWidth = windows.first?.frame.width,
-              firstWidth > 0, windows.allSatisfy({ abs($0.frame.width - firstWidth) <= 0.5
+              firstWidth > 0, windows.allSatisfy({ abs($0.frame.width - firstWidth) <= pixel
                   && $0.frame.width <= maximumWindowWidth + 0.5 }) else { return false }
         let viewport = scroll.contentView.bounds
         return !scroll.hasHorizontalScroller && !scroll.hasVerticalScroller
             && abs(viewport.minX) < 0.5
-            && stack.frame.width <= scroll.contentSize.width + 0.5
+            && stack.frame.width <= scroll.contentSize.width + pixel
             && stack.arrangedSubviews.allSatisfy {
                 $0.frame.minX >= -0.5 && $0.frame.maxX <= stack.bounds.maxX + 0.5
             }

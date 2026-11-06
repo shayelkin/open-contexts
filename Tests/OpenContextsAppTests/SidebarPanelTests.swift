@@ -830,8 +830,11 @@ final class SidebarPanelTests: XCTestCase {
         pinStore.togglePin(id: windows[1].id)
         sidebar.update(groups: groups, windowsByGroup: [GroupStore.ungroupedID: pinWindows],
                        alwaysVisible: true, fullscreen: false, position: .right)
+        guard let firstRow = sidebar.smokeVisibleRowOrder.firstIndex(of: "w:\(windows[0].id)") else {
+            return XCTFail("sidebar did not show the first pinned window: \(sidebar.smokeVisibleRowOrder)")
+        }
         sidebar.smokeBeginDrag()
-        sidebar.smokePreviewWindow(windows[3].id, at: sidebar.smokeRowCoordinates[5])
+        sidebar.smokePreviewWindow(windows[3].id, at: sidebar.smokeRowCoordinates[firstRow * 3 + 2])
         let pinnedPreviewIDs = sidebar.smokeRowOrder.compactMap { $0.hasPrefix("w:") ? String($0.dropFirst(2)) : nil }
         pinStore.moveWindow(id: windows[3].id, to: GroupStore.ungroupedID, before: windows[1].id,
                             visibleOrderByGroup: [GroupStore.ungroupedID: pinnedPreviewIDs])

@@ -40,7 +40,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
     private var itemDisplayMode: SidebarItemDisplayMode = .iconAndTitle
     private(set) var language: AppLanguage = .system
     private var hoverState = SidebarHoverState()
-    var hoverTimer: Timer?
+    var pointerTracker: PointerTracker?
     private var contextMenuOpen = false
     var dragging = false
     private var sourceDragging = false
@@ -194,8 +194,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
         if isShortcutExpanded {
             startHoverPolling()
         } else if !enabled {
-            hoverTimer?.invalidate()
-            hoverTimer = nil
+            stopHoverTracking()
         }
     }
 
@@ -204,8 +203,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
     }
 
     override func close() {
-        hoverTimer?.invalidate()
-        hoverTimer = nil
+        stopHoverTracking()
         stopReveal()
         cancelIconRetries()
         super.close()
@@ -228,8 +226,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
             if enabled {
                 startHoverPolling()
             } else {
-                hoverTimer?.invalidate()
-                hoverTimer = nil
+                stopHoverTracking()
             }
         }
         self.enabled = enabled
@@ -510,8 +507,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
         guard enabled || isShortcutExpanded, hasVisibleContent else {
             hoverState = SidebarHoverState()
             if !enabled {
-                hoverTimer?.invalidate()
-                hoverTimer = nil
+                stopHoverTracking()
             }
             stopReveal()
             revealProgress = 0
@@ -613,15 +609,15 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
     }
 
     private func startHoverPolling() {
-        guard hoverTimer == nil else { return }
-        let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.updateHover(pointer: NSEvent.mouseLocation,
-                                  now: ProcessInfo.processInfo.systemUptime)
-            }
+        guard pointerTracker == nil else { return }
+        pointerTracker = PointerTracker { [weak self] in
+            self?.updateHover(pointer: NSEvent.mouseLocation, now: ProcessInfo.processInfo.systemUptime)
         }
-        RunLoop.main.add(timer, forMode: .common)
-        hoverTimer = timer
+    }
+
+    func stopHoverTracking() {
+        pointerTracker?.stop()
+        pointerTracker = nil
     }
 
     func updateHover(pointer: CGPoint, now: TimeInterval) {
@@ -633,6 +629,8 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
                              dragging: dragging || resizeStart != nil, menuOpen: contextMenuOpen, now: now) {
             layoutPanel()
         }
+        // Mouse events stop once the pointer rests outside, so a timer finishes the collapse delay.
+        if let deadline = hoverState.collapseDeadline() { pointerTracker?.scheduleFollowUp(after: deadline - now) }
     }
 
     func sourceDraggingChanged(_ active: Bool) {
@@ -1062,6 +1060,46 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
         let response = withAppActivated { alert.runModal() }
         guard response == .alertFirstButtonReturn else { return }
         completion(field.stringValue)
+    }
+}
+
+/// Calls `onChange` for pointer movement anywhere on screen, instead of polling the pointer.
+@MainActor
+final class PointerTracker {
+    private var monitors: [Any] = []
+    private(set) var followUp: Timer?
+    private let onChange: () -> Void
+
+    init(onChange: @escaping () -> Void) {
+        self.onChange = onChange
+        let mask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged]
+        let global = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] _ in
+            MainActor.assumeIsolated { self?.onChange() }
+        }
+        let local = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
+            MainActor.assumeIsolated { self?.onChange() }
+            return event
+        }
+        monitors = [global, local].compactMap { $0 }
+    }
+
+    func scheduleFollowUp(after delay: TimeInterval) {
+        followUp?.invalidate()
+        let timer = Timer(timeInterval: max(delay, 0) + 0.01, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.followUp = nil
+                self?.onChange()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        followUp = timer
+    }
+
+    func stop() {
+        monitors.forEach(NSEvent.removeMonitor)
+        monitors = []
+        followUp?.invalidate()
+        followUp = nil
     }
 }
 

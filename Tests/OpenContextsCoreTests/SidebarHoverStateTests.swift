@@ -190,4 +190,35 @@ final class SidebarHoverStateTests: XCTestCase {
                                    dragging: false, now: 6.13))
         XCTAssertFalse(state.isExpanded)
     }
+
+    func testCollapseDeadlineIsWhenARestingPointerCollapsesTheSidebar() {
+        var random = SystemRandomNumberGenerator()
+        let points = [CGPoint(x: 700, y: 400), CGPoint(x: 900, y: 400), CGPoint(x: 995, y: 400), CGPoint(x: 995, y: 50)]
+        for _ in 0..<500 {
+            var state = SidebarHoverState()
+            var now = 0.0
+            for _ in 0..<30 {
+                now += Double.random(in: 0...0.3, using: &random)
+                let menuOpen = Int.random(in: 0..<10, using: &random) == 0
+                if Int.random(in: 0..<15, using: &random) == 0 { state.setShortcutExpanded(Bool.random(using: &random)) }
+                state.update(pointer: points.randomElement(using: &random)!, edgeFrame: edge, expandedFrame: expanded,
+                             dragging: false, menuOpen: menuOpen, now: now)
+                guard let deadline = state.collapseDeadline() else { continue }
+                XCTAssertTrue(state.isExpanded)
+                var resting = state
+                resting.update(pointer: points[0], edgeFrame: edge, expandedFrame: expanded, dragging: false,
+                               now: deadline + 0.001)
+                XCTAssertFalse(resting.isExpanded, "a pointer resting outside past the deadline kept it expanded")
+                XCTAssertNil(resting.collapseDeadline())
+                var early = state
+                early.update(pointer: points[0], edgeFrame: edge, expandedFrame: expanded, dragging: false,
+                             now: deadline - 0.01)
+                XCTAssertTrue(early.isExpanded, "the sidebar collapsed before its deadline")
+            }
+        }
+        var idle = SidebarHoverState()
+        XCTAssertNil(idle.collapseDeadline())
+        idle.update(pointer: points[0], edgeFrame: edge, expandedFrame: expanded, dragging: false, now: 1)
+        XCTAssertNil(idle.collapseDeadline(), "a collapsed sidebar reported a pending collapse")
+    }
 }

@@ -20,6 +20,14 @@ public struct SidebarHoverState: Equatable {
             : CGRect(x: screen.minX, y: edge.minY, width: screen.width + 1, height: edge.height)
     }
 
+    /// When the pending collapse happens if the pointer stays outside; nil when none is pending.
+    public func collapseDeadline(collapseDelay: TimeInterval = defaultCollapseDelay) -> TimeInterval? {
+        guard isExpanded, let outsideSince else { return nil }
+        return outsideSince + max(collapseDelay, 0)
+    }
+
+    public static let defaultCollapseDelay: TimeInterval = 0.12
+
     public mutating func setShortcutExpanded(_ expanded: Bool) {
         isShortcutExpanded = expanded
         isExpanded = expanded
@@ -31,7 +39,7 @@ public struct SidebarHoverState: Equatable {
     @discardableResult
     public mutating func update(pointer: CGPoint, edgeFrame: CGRect, expandedFrame: CGRect,
                                 dragging: Bool, menuOpen: Bool = false, now: TimeInterval,
-                                collapseDelay: TimeInterval = 0.12) -> Bool {
+                                collapseDelay: TimeInterval = defaultCollapseDelay) -> Bool {
         let previous = isExpanded
         if expandedFrame.contains(pointer) || edgeFrame.contains(pointer) {
             waitingForShortcutHover = false

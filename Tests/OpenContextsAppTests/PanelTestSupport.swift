@@ -244,9 +244,10 @@ extension SidebarPanel {
         return scroll.contentView.bounds.intersects(row.convert(row.bounds, to: scroll.contentView))
     }
 
+    var smokeIsCollapsed: Bool { revealTarget == 0 }
+
     func smokeStopHoverPolling() {
-        hoverTimer?.invalidate()
-        hoverTimer = nil
+        stopHoverTracking()
     }
 
     func smokeSetAnimatesVisibility(_ animates: Bool) { animatesVisibility = animates }

@@ -945,4 +945,36 @@ final class SidebarPanelTests: XCTestCase {
         perform(delete)
         XCTAssertEqual(deleted, [firstGroupID])
     }
+
+    func testPointerTrackerFollowUpFiresOnceAndStopCancelsIt() async throws {
+        var calls = 0
+        let tracker = PointerTracker { calls += 1 }
+        tracker.scheduleFollowUp(after: 0.05)
+        tracker.scheduleFollowUp(after: 0.05)
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertEqual(calls, 1, "a rescheduled follow-up fired more than once")
+        XCTAssertNil(tracker.followUp)
+        tracker.scheduleFollowUp(after: -5)
+        tracker.stop()
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(calls, 1, "stop did not cancel the follow-up")
+    }
+
+    func testLeavingTheSidebarSchedulesTheCollapseWithoutPolling() throws {
+        sidebar.update(groups: groups, windowsByGroup: [GroupStore.ungroupedID: [windows[0]]],
+                       alwaysVisible: false, fullscreen: false, position: .right)
+        sidebar.smokeStopHoverPolling()
+        sidebar.pointerTracker = PointerTracker {}
+        defer { sidebar.smokeStopHoverPolling() }
+        let frames = sidebar.sidebarFrames()
+        let edge = NSPoint(x: frames.edge.midX, y: frames.edge.midY)
+        let outside = NSPoint(x: frames.expanded.minX - 50, y: frames.expanded.midY)
+        sidebar.updateHover(pointer: edge, now: 100)
+        XCTAssertNil(sidebar.pointerTracker?.followUp)
+        sidebar.updateHover(pointer: outside, now: 101)
+        let followUp = try XCTUnwrap(sidebar.pointerTracker?.followUp, "leaving did not schedule the collapse")
+        XCTAssertEqual(followUp.fireDate.timeIntervalSinceNow, SidebarHoverState.defaultCollapseDelay + 0.01, accuracy: 0.05)
+        sidebar.updateHover(pointer: outside, now: 101 + SidebarHoverState.defaultCollapseDelay + 0.01)
+        XCTAssertTrue(sidebar.smokeIsCollapsed)
+    }
 }

@@ -58,13 +58,11 @@
 "No matching windows" = "No matching windows";
 "Try an app name or window title" = "Try an app name or window title";
 "General" = "General";
-"Features" = "Features";
 "Shortcuts" = "Shortcuts";
 "Groups" = "Groups";
 "Show or hide sidebar" = "Show or hide sidebar";
 "Disable" = "Disable";
 "Shortcuts must be different." = "Shortcuts must be different.";
-"Move the pointer into the sidebar and away, press its shortcut again or Esc to restore its visibility setting." = "Move the pointer into the sidebar and away, press its shortcut again or Esc to restore its visibility setting.";
 "Window switcher" = "Window switcher";
 "Show windows from all desktops" = "Show windows from all desktops";
 "The current desktop comes first in recent order. Other desktops stay grouped in a stable order." = "The current desktop comes first in recent order. Other desktops stay grouped in a stable order.";

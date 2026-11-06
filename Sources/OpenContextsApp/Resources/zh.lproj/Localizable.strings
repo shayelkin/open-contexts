@@ -58,13 +58,11 @@
 "No matching windows" = "没有匹配窗口";
 "Try an app name or window title" = "试试应用名或窗口标题";
 "General" = "通用";
-"Features" = "功能";
 "Shortcuts" = "快捷键";
 "Groups" = "分组";
 "Show or hide sidebar" = "显示／隐藏侧边栏";
 "Disable" = "禁用";
 "Shortcuts must be different." = "快捷键不能相同。";
-"Move the pointer into the sidebar and away, press its shortcut again or Esc to restore its visibility setting." = "鼠标移入侧边栏后再移出可恢复原显示模式，也可再次按快捷键或 Esc。";
 "Window switcher" = "窗口切换器";
 "Show windows from all desktops" = "显示所有桌面的窗口";
 "The current desktop comes first in recent order. Other desktops stay grouped in a stable order." = "当前桌面置顶并按最近使用排序，其他桌面分组采用稳定顺序。";

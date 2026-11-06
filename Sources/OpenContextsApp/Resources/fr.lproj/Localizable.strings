@@ -1,6 +1,6 @@
 "Always visible" = "Toujours visible";
 "Show on hover" = "Afficher au survol";
-"Off" = "Désactivée";
+"Off" = "Désactivé";
 "Top" = "En haut";
 "Center" = "Au centre";
 "Vertical alignment" = "Alignement vertical";
@@ -48,7 +48,7 @@
 "Cancel" = "Annuler";
 "Move group to end" = "Déplacer le groupe à la fin";
 "Press shortcut…" = "Appuyez sur le raccourci…";
-"Restore defaults" = "Valeurs par défaut";
+"Restore defaults" = "Rétablir les valeurs par défaut";
 "Click a shortcut to record. Esc cancels; Shift switches backward." = "Cliquez pour enregistrer. Échap annule ; Maj inverse le sens.";
 "Use Command, Option or Control with a key; Shift is reserved for reverse switching." = "Utilisez Commande, Option ou Contrôle avec une touche ; Maj est réservé au sens inverse.";
 "Type an app name or window title" = "Saisissez un nom d’app ou un titre de fenêtre";
@@ -58,13 +58,11 @@
 "No matching windows" = "Aucune fenêtre correspondante";
 "Try an app name or window title" = "Essayez un nom d’app ou un titre de fenêtre";
 "General" = "Général";
-"Features" = "Fonctionnalités";
 "Shortcuts" = "Raccourcis";
 "Groups" = "Groupes";
 "Show or hide sidebar" = "Afficher ou masquer la barre latérale";
 "Disable" = "Désactiver";
 "Shortcuts must be different." = "Les raccourcis doivent être différents.";
-"Move the pointer into the sidebar and away, press its shortcut again or Esc to restore its visibility setting." = "Placez le pointeur dans la barre latérale puis retirez-le, ou appuyez à nouveau sur son raccourci ou sur Échap pour rétablir son mode d’affichage.";
 "Window switcher" = "Sélecteur de fenêtres";
 "Show windows from all desktops" = "Afficher les fenêtres de tous les bureaux";
 "The current desktop comes first in recent order. Other desktops stay grouped in a stable order." = "Le bureau actuel apparaît en premier, par utilisation récente. Les autres bureaux restent groupés dans un ordre stable.";

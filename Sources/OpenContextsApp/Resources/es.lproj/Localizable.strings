@@ -1,6 +1,6 @@
 "Always visible" = "Siempre visible";
 "Show on hover" = "Mostrar al pasar el cursor";
-"Off" = "Desactivada";
+"Off" = "Desactivado";
 "Top" = "Arriba";
 "Center" = "Centro";
 "Vertical alignment" = "Alineación vertical";
@@ -48,7 +48,7 @@
 "Cancel" = "Cancelar";
 "Move group to end" = "Mover grupo al final";
 "Press shortcut…" = "Pulsa el atajo…";
-"Restore defaults" = "Restaurar valores";
+"Restore defaults" = "Restaurar valores predeterminados";
 "Click a shortcut to record. Esc cancels; Shift switches backward." = "Haz clic para grabar. Esc cancela; Mayús cambia hacia atrás.";
 "Use Command, Option or Control with a key; Shift is reserved for reverse switching." = "Usa Comando, Opción o Control con una tecla; Mayús se reserva para cambiar hacia atrás.";
 "Type an app name or window title" = "Escribe un nombre de app o título de ventana";
@@ -58,13 +58,11 @@
 "No matching windows" = "No hay ventanas coincidentes";
 "Try an app name or window title" = "Prueba un nombre de app o título de ventana";
 "General" = "General";
-"Features" = "Funciones";
 "Shortcuts" = "Atajos";
 "Groups" = "Grupos";
 "Show or hide sidebar" = "Mostrar u ocultar la barra lateral";
 "Disable" = "Desactivar";
 "Shortcuts must be different." = "Los atajos deben ser diferentes.";
-"Move the pointer into the sidebar and away, press its shortcut again or Esc to restore its visibility setting." = "Mueve el puntero dentro y fuera de la barra lateral, o pulsa de nuevo su atajo o Esc para volver a su modo de visibilidad.";
 "Window switcher" = "Selector de ventanas";
 "Show windows from all desktops" = "Mostrar ventanas de todos los escritorios";
 "The current desktop comes first in recent order. Other desktops stay grouped in a stable order." = "El escritorio actual aparece primero, por uso reciente. Los demás se agrupan en un orden estable.";

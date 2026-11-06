@@ -15,10 +15,6 @@ xcodegen generate
 xcodebuild -project OpenContexts.xcodeproj -scheme OpenContexts -configuration Release build
 ```
 
-The ad-hoc signed app is written to `build/Build/Products/Release/OpenContexts.app`. Omit the
-`ARCHS` and `ONLY_ACTIVE_ARCH` settings to build for the native architecture only, and pass
-`CURRENT_PROJECT_VERSION=<n>` to set the build number.
-
 Run the tests with `swift test`.
 
 ## Acknowledging AI Use

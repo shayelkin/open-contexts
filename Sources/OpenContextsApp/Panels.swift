@@ -1233,8 +1233,9 @@ final class SwitcherPanel: NSPanel {
         }
 
         let area = displayScreen.visibleFrame
-        let width = max(320, min(600, area.width - 48))
-        let height = min(max(CGFloat(totalWindowCount ?? results.count) * 28 + CGFloat(sectionCount) * 26 + 16, 100) + 40,
+        let width = min(area.width, max(320, min(600, area.width - 48)))
+        let displayedWindowCount = query.isEmpty ? (totalWindowCount ?? results.count) : results.count
+        let height = min(max(CGFloat(displayedWindowCount) * 28 + CGFloat(sectionCount) * 26 + 16, 100) + 40,
                          max(140, area.height - 80))
         setFrame(NSRect(x: area.midX - width / 2, y: area.midY - height / 2,
                         width: width, height: height), display: true)

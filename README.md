@@ -12,7 +12,7 @@ Requires Xcode and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew inst
 
 ```sh
 xcodegen generate
-xcodebuild -project OpenContexts.xcodeproj -scheme OpenContexts build
+xcodebuild -project OpenContexts.xcodeproj -scheme OpenContexts -configuration Release build
 ```
 
 The ad-hoc signed app is written to `build/Build/Products/Release/OpenContexts.app`. Omit the
@@ -26,6 +26,7 @@ Run the tests with `swift test`.
 This code was written with assistance from the following AI models:
 
 - Claude Opus 5.5 (Anthropic)
+- GPT-6-Luna (OpenAI)
 
 ## License
 

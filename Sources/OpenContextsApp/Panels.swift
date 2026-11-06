@@ -1157,6 +1157,16 @@ final class SwitcherPanel: NSPanel {
     private let onSelect: (String) -> Void
     let displayScreen: NSScreen
     private(set) weak var selectedRow: SwitcherRow?
+    private var rendered: RenderedResults?
+
+    private struct RenderedResults: Equatable {
+        let results: [WindowSearch.Match]
+        let selectedIndex: Int
+        let groupBySpace: Bool
+        let query: String
+        let totalWindowCount: Int?
+        let language: AppLanguage
+    }
     private(set) var hoverOrigin = NSEvent.mouseLocation
 
     init(screen: NSScreen, onActivate: @escaping (String) -> Void,
@@ -1265,6 +1275,7 @@ final class SwitcherPanel: NSPanel {
     func show(results: [WindowSearch.Match], selectedIndex: Int, query: String = "",
               groupBySpace: Bool = false,
               totalWindowCount: Int? = nil, language: AppLanguage = .system) {
+        SwitcherIcons.keep(only: results.map(\.window))
         update(results: results, selectedIndex: selectedIndex, resetHover: true,
                groupBySpace: groupBySpace, query: query, totalWindowCount: totalWindowCount, language: language)
         orderFrontRegardless()
@@ -1279,6 +1290,11 @@ final class SwitcherPanel: NSPanel {
             hoverOrigin = NSEvent.mouseLocation
         }
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Window scans refresh the switcher several times a second; rebuild rows only when something changed.
+        let request = RenderedResults(results: results, selectedIndex: selectedIndex, groupBySpace: groupBySpace,
+                                      query: query, totalWindowCount: totalWindowCount, language: language)
+        guard request != rendered else { return }
+        rendered = request
         queryLabel.stringValue = query.isEmpty ? L10n.text("Type an app name or window title", language: language) : query
         queryLabel.textColor = query.isEmpty ? .secondaryLabelColor : .labelColor
         queryLabel.setAccessibilityLabel(L10n.text("Window search", language: language))
@@ -1797,7 +1813,7 @@ final class SwitcherRow: NSButton {
         callback = action
         self.onPointerMove = onPointerMove
         appLabel = NSTextField(labelWithString: window.appName)
-        iconView = NSImageView(image: applicationIcon(for: window))
+        iconView = NSImageView(image: SwitcherIcons.icon(for: window))
         titleLabel = NSTextField(labelWithString: window.displayTitle)
         self.selected = selected
         super.init(frame: .zero)
@@ -1959,9 +1975,25 @@ extension CGRect {
     }
 }
 
+/// Resolved app icons shared by the switcher rows, which are rebuilt on every keystroke on every display.
 @MainActor
-private func applicationIcon(for window: WindowInfo) -> NSImage {
-    resolvedApplicationIcon(for: window) ?? fallbackApplicationIcon(for: window)
+enum SwitcherIcons {
+    private static var cache: [String: NSImage] = [:]
+
+    static func icon(for window: WindowInfo) -> NSImage {
+        let key = applicationIconKey(for: window)
+        if let cached = cache[key] { return cached }
+        guard let icon = resolvedApplicationIcon(for: window) else { return fallbackApplicationIcon(for: window) }
+        cache[key] = icon
+        return icon
+    }
+
+    static func keep(only windows: [WindowInfo]) {
+        let keys = Set(windows.map(applicationIconKey))
+        cache = cache.filter { keys.contains($0.key) }
+    }
+
+    static var cachedCount: Int { cache.count }
 }
 
 private func applicationIconKey(for window: WindowInfo) -> String {

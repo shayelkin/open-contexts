@@ -1,7 +1,7 @@
 import Foundation
 
 public enum WindowSearch {
-    public struct Match {
+    public struct Match: Equatable {
         public let window: WindowInfo
         public let appRanges: [NSRange]
         public let titleRanges: [NSRange]

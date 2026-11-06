@@ -161,4 +161,36 @@ final class SwitcherPanelTests: XCTestCase {
                         groupBySpace: true, language: .en)
         XCTAssertEqual(switcher.smokeSpaceHeaders, ["Desktop 2", "Full screen Player"])
     }
+
+    func testIdenticalUpdatesKeepRowsAndIconsAreResolvedOncePerApp() throws {
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let windows = (0..<3).map { WindowInfo(id: "w\($0)", appID: "same-app", appName: "App", title: "T\($0)", processID: pid) }
+        let results = WindowSearch.filter(windows, query: "")
+        func rows() -> [ObjectIdentifier] { switcher.stack.arrangedSubviews.map(ObjectIdentifier.init) }
+        func icons() -> [NSImage?] {
+            switcher.stack.arrangedSubviews.compactMap { ($0 as? SwitcherRow)?.iconView.image }
+        }
+        switcher.show(results: results, selectedIndex: 0)
+        let shown = rows()
+        XCTAssertEqual(SwitcherIcons.cachedCount, 1)
+        let firstIcons = icons()
+        XCTAssertTrue(firstIcons.allSatisfy { $0 === firstIcons[0] }, "each row resolved its own icon")
+
+        switcher.update(results: results, selectedIndex: 0)
+        switcher.update(results: results, selectedIndex: 0, resetHover: true)
+        XCTAssertEqual(rows(), shown, "an unchanged refresh rebuilt the rows")
+
+        switcher.update(results: results, selectedIndex: 1)
+        XCTAssertNotEqual(rows(), shown)
+        XCTAssertEqual(switcher.smokeHighlightedIndices, [1])
+        XCTAssertTrue(icons().allSatisfy { $0 === firstIcons[0] }, "the rebuilt rows did not reuse the cached icon")
+
+        var renamed = windows
+        renamed[2].title = "Changed"
+        switcher.update(results: WindowSearch.filter(renamed, query: ""), selectedIndex: 1)
+        XCTAssertEqual((switcher.stack.arrangedSubviews.last as? SwitcherRow)?.titleLabel.stringValue, "Changed")
+
+        switcher.show(results: [], selectedIndex: 0)
+        XCTAssertEqual(SwitcherIcons.cachedCount, 0, "icons of apps no longer shown stayed cached")
+    }
 }

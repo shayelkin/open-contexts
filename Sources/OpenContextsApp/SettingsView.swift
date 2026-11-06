@@ -460,8 +460,6 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     Text(L10n.text("Click a shortcut to record. Esc cancels; Shift switches backward.", language: language))
                         .foregroundStyle(.secondary)
-                    Text(L10n.text("Move the pointer into the sidebar and away, press its shortcut again or Esc to restore its visibility setting.", language: language))
-                        .foregroundStyle(.secondary)
                     Button(L10n.text("Restore defaults", language: language)) {
                         shortcuts.cancelRecording()
                         settings.resetShortcuts()

@@ -659,6 +659,8 @@ final class WindowServiceAccessibilityTests: XCTestCase {
         return (service, target)
     }
 
+    private static let focusHint = "(another app may have taken focus during the test)"
+
     private func assertFrontmost(_ target: WindowService.TrackedWindow, file: StaticString = #filePath,
                                  line: UInt = #line) {
         let focused: AXUIElement? = WindowService.attribute(kAXFocusedWindowAttribute,
@@ -667,10 +669,11 @@ final class WindowServiceAccessibilityTests: XCTestCase {
             as? [[String: Any]] ?? []
         let frontWindow = onScreen.first { ($0[kCGWindowLayer as String] as? Int) == 0 }
         XCTAssertEqual(NSWorkspace.shared.frontmostApplication?.processIdentifier, target.info.processID,
-                       "frontmost app", file: file, line: line)
-        XCTAssertEqual(focused.flatMap(WindowSpaces.windowID), target.windowID, "focused window", file: file, line: line)
+                       "frontmost app \(Self.focusHint)", file: file, line: line)
+        XCTAssertEqual(focused.flatMap(WindowSpaces.windowID), target.windowID,
+                       "focused window \(Self.focusHint)", file: file, line: line)
         XCTAssertEqual((frontWindow?[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value, target.info.processID,
-                       "topmost window owner", file: file, line: line)
+                       "topmost window owner \(Self.focusHint)", file: file, line: line)
         XCTAssertEqual(WindowSpaces.query()?.space(for: target.windowID)?.isCurrent, true,
                        "target desktop is current", file: file, line: line)
     }

@@ -15,7 +15,11 @@ xcodegen generate
 xcodebuild -project OpenContexts.xcodeproj -scheme OpenContexts -configuration Release build
 ```
 
-Run the tests with `swift test`.
+Run the tests with `swift test`. Some tests activate windows and then check which app and window are
+frontmost (`testActivationRaisesAndFocusesWindow` and `testActivationOverridesSpaceFocusRestoration`). If
+another app takes focus while they run, for example because you switch apps or a notification or a launching
+app grabs focus, they fail without a bug in OpenContexts. Leave the machine idle while they run, or rerun them
+alone with `swift test --filter testActivation`.
 
 ## Acknowledging AI Use
 

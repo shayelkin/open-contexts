@@ -174,6 +174,36 @@ final class WindowServiceTests: XCTestCase {
         assertFresh(resolve(.zero, listed: [zero], previous: [zero]), "zero frame")
         assertFresh(resolve(empty, previous: [tab("empty", element: 9009, frame: empty)]), "empty frame")
     }
+
+    func testCoreFoundationCastsCheckTheRuntimeType() throws {
+        var point = CGPoint(x: 1, y: 2)
+        let element = AXUIElementCreateApplication(getpid())
+        let value = try XCTUnwrap(AXValueCreate(.cgPoint, &point))
+        let samples: [(name: String, value: CFTypeRef, isElement: Bool, isValue: Bool, isElements: Bool)] = [
+            ("string", "text" as CFString, false, false, false),
+            ("number", 3 as CFNumber, false, false, false),
+            ("boolean", kCFBooleanTrue, false, false, false),
+            ("element", element, true, false, false),
+            ("value", value, false, true, false),
+            ("elements", [element, AXUIElementCreateApplication(1)] as CFArray, false, false, true),
+            ("empty array", [] as CFArray, false, false, true),
+            ("mixed array", [element, "text" as CFString] as CFArray, false, false, false),
+            ("values", [value] as CFArray, false, false, false)
+        ]
+        for sample in samples {
+            XCTAssertEqual(WindowService.cast(sample.value, to: AXUIElement.self) != nil, sample.isElement, sample.name)
+            XCTAssertEqual(WindowService.cast(sample.value, to: AXValue.self) != nil, sample.isValue, sample.name)
+            XCTAssertEqual(WindowService.cast(sample.value, to: [AXUIElement].self) != nil, sample.isElements,
+                           sample.name)
+            XCTAssertNotNil(WindowService.cast(sample.value, to: CFTypeRef.self), sample.name)
+        }
+        XCTAssertEqual(WindowService.cast("text" as CFString, to: String.self), "text")
+        XCTAssertNil(WindowService.cast(3 as CFNumber, to: String.self))
+        XCTAssertEqual(WindowService.cast(kCFBooleanTrue, to: Bool.self), true)
+        XCTAssertNil(WindowService.cast("text" as CFString, to: Bool.self))
+        let elements = try XCTUnwrap(WindowService.cast([element] as CFArray, to: [AXUIElement].self))
+        XCTAssertTrue(elements.elementsEqual([element]) { CFEqual($0, $1) })
+    }
 }
 
 /// Tests that drive other apps through the Accessibility API. They run only when the process

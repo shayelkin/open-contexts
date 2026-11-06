@@ -656,8 +656,25 @@ final class WindowService: ObservableObject {
         if result == .attributeUnsupported || result == .noValue { return .noValue }
         guard result == .success else { return .failure(result) }
         guard let value else { return .noValue }
-        guard let typed = value as? T else { return .noValue }
+        guard let typed = cast(value, to: T.self) else { return .noValue }
         return .value(typed)
+    }
+
+    /// `as?` and `is` with CoreFoundation types are not checked at runtime and always succeed, so those casts
+    /// compare the CFTypeID instead.
+    nonisolated static func cast<T>(_ value: CFTypeRef, to type: T.Type) -> T? {
+        switch ObjectIdentifier(type) {
+        case ObjectIdentifier(AXUIElement.self):
+            return CFGetTypeID(value) == AXUIElementGetTypeID() ? value as? T : nil
+        case ObjectIdentifier(AXValue.self):
+            return CFGetTypeID(value) == AXValueGetTypeID() ? value as? T : nil
+        case ObjectIdentifier([AXUIElement].self):
+            guard CFGetTypeID(value) == CFArrayGetTypeID(), let elements = value as? [AnyObject],
+                  elements.allSatisfy({ CFGetTypeID($0) == AXUIElementGetTypeID() }) else { return nil }
+            return elements as? T
+        default:
+            return value as? T
+        }
     }
 
     nonisolated private static func boolAttribute(_ name: String, of element: AXUIElement) -> Bool {

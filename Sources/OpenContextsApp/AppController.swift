@@ -315,7 +315,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         item.button?.image = image
         item.button?.setAccessibilityLabel("OtherContexts")
         let menu = NSMenu()
-        menu.addItem(withTitle: L10n.text("Settings…", language: settings.language), action: #selector(showSettings), keyEquivalent: ",").target = self
+        menu.addItem(withTitle: L10n.text("Settings…", language: settings.language), action: #selector(showSettings), keyEquivalent: "").target = self
         menu.addItem(withTitle: L10n.text("Grant Accessibility Access…", language: settings.language), action: #selector(requestAccessibility), keyEquivalent: "")
             .target = self
         menu.addItem(.separator())

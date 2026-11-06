@@ -118,7 +118,7 @@ enum WindowSpaces {
         state.unresolved = remaining
         guard !remaining.isEmpty else { return targets.compactMap { state.windows[$0] } }
         while state.cursor < maxElementID, ProcessInfo.processInfo.systemUptime < deadline {
-            // shortcut: remote AX tokens use an undocumented 20-byte ABI; revisit if macOS changes it.
+            // Remote AX tokens use an undocumented 20-byte layout: pid, 0, "coco", then the element ID.
             var token = Data()
             for value in [UInt32(bitPattern: pid), 0, 0x636f636f] {
                 var field = value.littleEndian

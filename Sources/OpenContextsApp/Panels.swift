@@ -1036,10 +1036,24 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
         alert.window.initialFirstResponder = field
         field.selectText(nil)
         // The sidebar never activates the app, so the alert would otherwise not receive typing.
-        NSApp.activate(ignoringOtherApps: true)
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let response = withAppActivated { alert.runModal() }
+        guard response == .alertFirstButtonReturn else { return }
         completion(field.stringValue)
     }
+}
+
+/// Activates OpenContexts for a modal prompt, then gives focus back to the app that had it.
+@MainActor
+func withAppActivated<T>(frontmost: () -> NSRunningApplication? = { NSWorkspace.shared.frontmostApplication },
+                         activateSelf: () -> Void = { NSApp.activate(ignoringOtherApps: true) },
+                         restore: (NSRunningApplication) -> Void = { _ = $0.activate(options: []) },
+                         _ body: () -> T) -> T {
+    let previous = frontmost()
+    activateSelf()
+    defer {
+        if let previous, previous.processIdentifier != getpid(), !previous.isTerminated { restore(previous) }
+    }
+    return body()
 }
 
 @MainActor

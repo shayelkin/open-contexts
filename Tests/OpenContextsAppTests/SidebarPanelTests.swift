@@ -857,4 +857,22 @@ final class SidebarPanelTests: XCTestCase {
         abs(sidebar.frame.height - min(sidebar.smokeNaturalContentHeight, area.height)) < 1
             && abs(sidebar.frame.midY - area.midY) < 1
     }
+
+    func testPromptActivatesThenReturnsFocusToThePreviousApp() throws {
+        let dock = try XCTUnwrap(NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.dock").first)
+        for (previous, expected) in [(Optional(dock), [dock.processIdentifier]),
+                                     (NSRunningApplication.current, []), (nil, [])] {
+            var events: [String] = []
+            var restored: [pid_t] = []
+            let result = withAppActivated(frontmost: { previous },
+                                          activateSelf: { events.append("activate") },
+                                          restore: { restored.append($0.processIdentifier); events.append("restore") }) {
+                events.append("prompt")
+                return 42
+            }
+            XCTAssertEqual(result, 42)
+            XCTAssertEqual(restored, expected)
+            XCTAssertEqual(events, ["activate", "prompt"] + (expected.isEmpty ? [] : ["restore"]))
+        }
+    }
 }

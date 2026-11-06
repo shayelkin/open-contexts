@@ -23,17 +23,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
 }
 
 enum L10n {
-    static let resources: Bundle? = {
-        if let executable = Bundle.main.executableURL {
-            let macOS = executable.deletingLastPathComponent()
-            let contents = macOS.deletingLastPathComponent()
-            if macOS.lastPathComponent == "MacOS", contents.lastPathComponent == "Contents",
-               contents.deletingLastPathComponent().pathExtension == "app" {
-                return Bundle(url: contents.appendingPathComponent("Resources/OpenContexts_OpenContextsApp.bundle"))
-            }
-        }
-        return Bundle.module
-    }()
+    static let resources: Bundle? = Bundle.module
 
     static func text(_ key: String, language: AppLanguage) -> String {
         guard let resources else { return key }

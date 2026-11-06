@@ -5,7 +5,7 @@ let package = Package(
     name: "OpenContexts",
     defaultLocalization: "en",
     platforms: [.macOS(.v13)],
-    products: [.executable(name: "OpenContexts", targets: ["OpenContexts"])],
+    products: [.library(name: "OpenContextsApp", targets: ["OpenContextsApp"])],
     targets: [
         .target(name: "OpenContextsCore"),
         .target(
@@ -13,7 +13,6 @@ let package = Package(
             dependencies: ["OpenContextsCore"],
             resources: [.process("Resources")]
         ),
-        .executableTarget(name: "OpenContexts", dependencies: ["OpenContextsApp"]),
         .testTarget(name: "OpenContextsCoreTests", dependencies: ["OpenContextsCore"]),
         .testTarget(name: "OpenContextsAppTests", dependencies: ["OpenContextsApp"])
     ]

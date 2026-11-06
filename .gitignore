@@ -2,3 +2,6 @@
 dist/
 .DS_Store
 .swiftpm/
+OpenContexts.xcodeproj/
+App/Info.plist
+build/

@@ -190,6 +190,37 @@ final class WindowServiceTests: XCTestCase {
         assertFresh(resolve(empty, previous: [tab("empty", element: 9009, frame: empty)]), "empty frame")
     }
 
+    func testFullscreenProbeRunsOnlyForVisibleDisplaySizedWindowsOnTheCurrentDesktop() {
+        let displays: [CGDirectDisplayID: CGRect] = [1: CGRect(x: 0, y: 0, width: 1000, height: 800),
+                                                     2: CGRect(x: 1000, y: 0, width: 800, height: 600)]
+        func window(_ id: String, pid: pid_t, frame: CGRect, current: Bool = true) -> WindowService.TrackedWindow {
+            WindowService.TrackedWindow(id: id, element: AXUIElementCreateApplication(pid),
+                                        info: WindowInfo(id: id, appID: id, appName: id, title: id, processID: pid,
+                                                         space: WindowSpace(id: 1, index: 1, isCurrent: current)),
+                                        frame: frame)
+        }
+        let full = window("full", pid: 11, frame: CGRect(x: 0, y: 25, width: 1000, height: 775))
+        let second = window("second", pid: 12, frame: CGRect(x: 1000, y: 0, width: 800, height: 600))
+        let small = window("small", pid: 13, frame: CGRect(x: 10, y: 10, width: 400, height: 300))
+        let hidden = window("hidden", pid: 14, frame: CGRect(x: 0, y: 0, width: 1000, height: 800))
+        let otherDesktop = window("other", pid: 15, frame: CGRect(x: 0, y: 0, width: 1000, height: 800), current: false)
+        let notFullscreen = window("windowed", pid: 16, frame: CGRect(x: 1000, y: 0, width: 800, height: 600))
+        let visible: [pid_t: [CGRect]] = [11: [full.frame!], 12: [second.frame!], 13: [small.frame!],
+                                          15: [otherDesktop.frame!], 16: [notFullscreen.frame!]]
+        var probed: [pid_t] = []
+        let result = WindowService.fullscreenDisplays(
+            in: [full, second, small, hidden, otherDesktop, notFullscreen], displays: displays, visibleFrames: visible,
+            isFullscreen: { element in
+                var pid: pid_t = 0
+                AXUIElementGetPid(element, &pid)
+                probed.append(pid)
+                return pid != 16
+            })
+        XCTAssertEqual(result, [1, 2])
+        XCTAssertEqual(probed, [11, 12, 16], "AXFullScreen was probed for windows that cannot be full screen")
+        XCTAssertEqual(WindowService.fullscreenDisplays(in: [full], displays: [:], visibleFrames: visible) { _ in true }, [])
+    }
+
     func testDiscoveryIndexStaysInRangeForEveryPass() {
         var random = SystemRandomNumberGenerator()
         let edges = [Int.min, Int.min + 1, -1, 0, 1, Int.max - 1, Int.max]
@@ -326,27 +357,6 @@ final class WindowServiceAccessibilityTests: XCTestCase {
         let dock = try XCTUnwrap(NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.dock").first)
         let reads = try XCTUnwrap(WindowService.scanDockBadges(processID: dock.processIdentifier))
         XCTAssertFalse(reads.isEmpty)
-    }
-
-    func testFullscreenDisplayRequiresWindowOnCurrentSpace() throws {
-        for app in NSWorkspace.shared.runningApplications where app.processIdentifier != getpid() {
-            let application = AXUIElementCreateApplication(app.processIdentifier)
-            AXUIElementSetMessagingTimeout(application, 0.05)
-            let elements: [AXUIElement] = WindowService.attribute(kAXWindowsAttribute, of: application) ?? []
-            for element in elements {
-                AXUIElementSetMessagingTimeout(element, 0.05)
-                var candidate = WindowService.TrackedWindow(
-                    id: "fullscreen", element: element,
-                    info: WindowInfo(id: "fullscreen", appID: "check", appName: "Check", title: "Check",
-                                     processID: app.processIdentifier,
-                                     space: WindowSpace(id: 1, index: 1, isCurrent: true)))
-                guard !WindowService.fullscreenDisplays(in: [candidate], isFullscreen: { _ in true }).isEmpty else { continue }
-                candidate.info.space = WindowSpace(id: 2, index: 2, isCurrent: false)
-                XCTAssertTrue(WindowService.fullscreenDisplays(in: [candidate], isFullscreen: { _ in true }).isEmpty)
-                return
-            }
-        }
-        XCTFail("no on-screen window of another app to check")
     }
 
     func testSpacesInventoryResolvesWindowsOnOtherSpaces() throws {

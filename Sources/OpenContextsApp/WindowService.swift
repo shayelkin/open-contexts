@@ -743,27 +743,37 @@ final class WindowService: ObservableObject {
         return .value(readFailed ? .readFailed : .unsupported)
     }
 
-    nonisolated static func fullscreenDisplays(in windows: [TrackedWindow],
-        isFullscreen: (AXUIElement) -> Bool = { boolAttribute("AXFullScreen", of: $0) }) -> Set<UInt32> {
-        var count: UInt32 = 0
-        guard CGGetActiveDisplayList(0, nil, &count) == .success else { return [] }
-        var displays = Array(repeating: CGDirectDisplayID(), count: Int(count))
-        guard CGGetActiveDisplayList(count, &displays, &count) == .success else { return [] }
-
-        let visibleFrames = onScreenWindowFrames()
+    /// Displays showing a full-screen window on the current desktop. The AXFullScreen probe is an IPC round trip,
+    /// so it only runs for visible windows that cover most of their display.
+    nonisolated static func fullscreenDisplays(
+        in windows: [TrackedWindow], displays: [CGDirectDisplayID: CGRect]? = nil,
+        visibleFrames: [pid_t: [CGRect]]? = nil,
+        isFullscreen: (AXUIElement) -> Bool = { boolAttribute("AXFullScreen", of: $0) }
+    ) -> Set<UInt32> {
+        guard let displays = displays ?? activeDisplayBounds() else { return [] }
+        let visibleFrames = visibleFrames ?? onScreenWindowFrames()
         var result: Set<UInt32> = []
-        for window in windows where window.info.isOnCurrentSpace && isFullscreen(window.element) {
-            guard let frame = frame(of: window.element),
+        for window in windows where window.info.isOnCurrentSpace {
+            guard let frame = window.frame ?? frame(of: window.element),
+                  let (display, bounds) = displays.max(by: {
+                      $0.value.intersection(frame).area < $1.value.intersection(frame).area
+                  }),
+                  bounds.intersection(frame).area >= bounds.area * 0.9,
                   visibleFrames[window.info.processID]?.contains(where: {
                       $0.intersection(frame).area >= frame.area * 0.9
-                  }) == true else { continue }
-            if let display = displays.max(by: {
-                CGDisplayBounds($0).intersection(frame).area < CGDisplayBounds($1).intersection(frame).area
-            }), CGDisplayBounds(display).intersection(frame).area > 0 {
-                result.insert(display)
-            }
+                  }) == true,
+                  isFullscreen(window.element) else { continue }
+            result.insert(display)
         }
         return result
+    }
+
+    nonisolated private static func activeDisplayBounds() -> [CGDirectDisplayID: CGRect]? {
+        var count: UInt32 = 0
+        guard CGGetActiveDisplayList(0, nil, &count) == .success else { return nil }
+        var displays = Array(repeating: CGDirectDisplayID(), count: Int(count))
+        guard CGGetActiveDisplayList(count, &displays, &count) == .success else { return nil }
+        return Dictionary(displays.prefix(Int(count)).map { ($0, CGDisplayBounds($0)) }, uniquingKeysWith: { first, _ in first })
     }
 
     nonisolated private static func onScreenWindowFrames() -> [pid_t: [CGRect]] {

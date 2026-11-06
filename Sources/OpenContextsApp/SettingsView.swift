@@ -124,6 +124,14 @@ final class AppSettings: ObservableObject {
         defaults.set(mode.rawValue, forKey: "sidebarMode")
     }
 
+    func toggleSidebarMode() {
+        switch sidebarMode {
+        case .always: setSidebarMode(.hover)
+        case .hover: setSidebarMode(.always)
+        case .hidden: return
+        }
+    }
+
     func setSidebarPosition(_ position: SidebarPosition) {
         sidebarPosition = position
         defaults.set(position.rawValue, forKey: "sidebarPosition")

@@ -44,6 +44,20 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(settings.sidebarWidth, AppSettings.defaultSidebarWidth)
     }
 
+    func testToggleSidebarModeSwapsAlwaysAndHoverAndKeepsOff() {
+        let expected: [SidebarVisibilityMode: SidebarVisibilityMode] = [.always: .hover, .hover: .always, .hidden: .hidden]
+        for mode in SidebarVisibilityMode.allCases {
+            let settings = AppSettings(defaults: defaults)
+            settings.setSidebarMode(mode)
+            settings.toggleSidebarMode()
+            XCTAssertEqual(settings.sidebarMode, expected[mode], "\(mode)")
+            XCTAssertEqual(reloaded.sidebarMode, expected[mode], "\(mode) was not persisted")
+            settings.toggleSidebarMode()
+            XCTAssertEqual(settings.sidebarMode, mode, "toggling \(mode) twice did not restore it")
+            XCTAssertEqual(reloaded.sidebarMode, mode)
+        }
+    }
+
     func testSidebarWidthIsClampedAndPersisted() {
         let settings = AppSettings(defaults: defaults)
         for width in [AppSettings.sidebarWidthRange.lowerBound, AppSettings.defaultSidebarWidth,

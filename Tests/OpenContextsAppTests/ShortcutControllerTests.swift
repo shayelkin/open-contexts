@@ -93,8 +93,6 @@ final class ShortcutControllerTests: XCTestCase {
         XCTAssertNil(controller.keyAction(keyCode: 11, flags: .maskCommand))
         XCTAssertNil(controller.keyAction(keyCode: 53, flags: []))
 
-        controller.canDismissSidebar = { true }
-        XCTAssertEqual(controller.keyAction(keyCode: 53, flags: []), .dismissSidebar)
         XCTAssertNotNil(controller.keyAction(keyCode: 48, flags: .maskCommand))
         XCTAssertEqual(controller.keyAction(keyCode: 53, flags: .maskCommand), .cancel)
         XCTAssertNotNil(controller.keyAction(keyCode: 48, flags: .maskCommand))

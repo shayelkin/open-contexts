@@ -183,19 +183,6 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
         super.orderOut(sender)
     }
 
-    var isShortcutExpanded: Bool { hoverState.isShortcutExpanded }
-    var canDismissShortcut: Bool { isShortcutExpanded && !contextMenuOpen && !dragging }
-
-    func setShortcutExpanded(_ expanded: Bool) {
-        hoverState.setShortcutExpanded(expanded)
-        layoutPanel()
-        if isShortcutExpanded {
-            startHoverPolling()
-        } else if !enabled {
-            stopHoverTracking()
-        }
-    }
-
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
         frameRect
     }
@@ -526,7 +513,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
     }
 
     func layoutPanel() {
-        guard enabled || isShortcutExpanded, hasVisibleContent else {
+        guard enabled, hasVisibleContent else {
             hoverState = SidebarHoverState()
             if !enabled {
                 stopHoverTracking()
@@ -643,7 +630,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
     }
 
     func updateHover(pointer: CGPoint, now: TimeInterval) {
-        guard enabled || isShortcutExpanded, hasVisibleContent else { return }
+        guard enabled, hasVisibleContent else { return }
         let frames = sidebarFrames()
         let trigger = SidebarHoverState.edgeTriggerFrame(edge: frames.edge, screen: displayScreen.frame,
                                                          vertical: position != .bottom)

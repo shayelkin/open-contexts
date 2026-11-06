@@ -162,13 +162,12 @@ final class SidebarPanelTests: XCTestCase {
         }
     }
 
-    func testShortcutExpansionAndVisibilityModes() {
+    func testVisibilityModes() {
         sidebar.update(groups: groups, windowsByGroup: [:], alwaysVisible: true, fullscreen: false,
                        showCreateGroup: false)
         var visibilityFrames = sidebar.smokeSidebarFrames
         sidebar.smokeUpdateHover(pointer: CGPoint(x: visibilityFrames.edge.midX, y: visibilityFrames.edge.midY), now: 0)
-        sidebar.setShortcutExpanded(true)
-        guard sidebar.smokeIsHidden, sidebar.smokeRowOrder.isEmpty, !sidebar.isShortcutExpanded else {
+        guard sidebar.smokeIsHidden, sidebar.smokeRowOrder.isEmpty else {
             return XCTFail("empty sidebar retained a visible or hoverable panel")
         }
         for position in SidebarPosition.allCases {
@@ -189,28 +188,8 @@ final class SidebarPanelTests: XCTestCase {
                     sidebar.update(groups: groups, windowsByGroup: [GroupStore.ungroupedID: [windows[0]]],
                                    alwaysVisible: mode == .always, fullscreen: fullscreen,
                                    enabled: mode != .hidden, position: position)
-                    sidebar.setShortcutExpanded(true)
-                    sidebar.smokeStopHoverPolling()
-                    let outside = CGPoint(x: screen.frame.maxX + 40, y: screen.frame.maxY + 40)
-                    sidebar.smokeUpdateHover(pointer: outside, now: 1)
-                    sidebar.smokeUpdateHover(pointer: outside, now: 5)
-                    guard sidebar.isShortcutExpanded, sidebar.canDismissShortcut, !sidebar.smokeIsHidden else {
-                        return XCTFail("shortcut sidebar did not stay visible: \(mode) \(position) \(fullscreen)")
-                    }
-                    sidebar.setShortcutExpanded(false)
-                    guard !sidebar.isShortcutExpanded,
-                          sidebar.isVisible == (mode == .always && !fullscreen) else {
-                        return XCTFail("shortcut sidebar did not restore its visibility setting")
-                    }
-                    sidebar.setShortcutExpanded(true)
-                    sidebar.smokeStopHoverPolling()
-                    let frames = sidebar.smokeSidebarFrames
-                    sidebar.smokeUpdateHover(pointer: CGPoint(x: frames.expanded.midX, y: frames.expanded.midY), now: 6)
-                    sidebar.smokeUpdateHover(pointer: outside, now: 7)
-                    sidebar.smokeUpdateHover(pointer: outside, now: 7.13)
-                    guard !sidebar.isShortcutExpanded,
-                          sidebar.isVisible == (mode == .always && !fullscreen) else {
-                        return XCTFail("shortcut sidebar did not restore visibility after pointer exit")
+                    guard sidebar.isVisible == (mode == .always && !fullscreen) else {
+                        return XCTFail("sidebar visibility did not match its mode: \(mode) \(position) \(fullscreen)")
                     }
                 }
             }

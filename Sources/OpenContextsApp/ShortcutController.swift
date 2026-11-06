@@ -70,7 +70,6 @@ enum ShortcutTarget: String, CaseIterable {
 
 enum SwitcherAction: Equatable {
     case toggleSidebar
-    case dismissSidebar
     case begin(currentAppOnly: Bool, reverse: Bool)
     case step(Int)
     case search(String)
@@ -136,7 +135,6 @@ final class ShortcutController: ObservableObject {
     @Published private(set) var recordingErrorKey: String?
     var onAction: ((SwitcherAction) -> Void)?
     var canBegin: ((Bool) -> Bool)?
-    var canDismissSidebar: (() -> Bool)?
     private(set) var allWindowsShortcut = KeyboardShortcut.allWindows
     private(set) var currentAppShortcut = KeyboardShortcut.currentApp
     private(set) var sidebarShortcut: KeyboardShortcut? = .sidebar
@@ -172,7 +170,6 @@ final class ShortcutController: ObservableObject {
     func beginRecording(target: ShortcutTarget, onSave: @escaping (KeyboardShortcut) -> Bool) {
         cancelRecording()
         if let action = state.finish(commit: false) { onAction?(action) }
-        onAction?(.dismissSidebar)
         recordingTarget = target
         saveRecording = onSave
         // Also records in Settings before Accessibility permission is granted.
@@ -248,7 +245,6 @@ final class ShortcutController: ObservableObject {
     func stop() {
         cancelRecording()
         if let action = state.finish(commit: false) { onAction?(action) }
-        onAction?(.dismissSidebar)
         if let source = runLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
         }
@@ -272,7 +268,6 @@ final class ShortcutController: ObservableObject {
     func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let action = state.finish(commit: false) { emit(action, deferred: true) }
-            emit(.dismissSidebar, deferred: true)
             if isTrusted(), let eventTap {
                 CGEvent.tapEnable(tap: eventTap, enable: true)
             }
@@ -281,7 +276,6 @@ final class ShortcutController: ObservableObject {
 
         guard isTrusted() else {
             if let action = state.finish(commit: false) { emit(action, deferred: true) }
-            emit(.dismissSidebar, deferred: true)
             isRunning = false
             return Unmanaged.passUnretained(event)
         }
@@ -327,9 +321,6 @@ final class ShortcutController: ObservableObject {
         if !flags.contains(.maskShift), sidebarShortcut?.matches(keyCode: keyCode, flags: flags) == true {
             _ = state.finish(commit: false)
             return .toggleSidebar
-        }
-        if !state.isSwitching, keyCode == 53, canDismissSidebar?() == true {
-            return .dismissSidebar
         }
         if state.isSwitching {
             if state.searchQuery.isEmpty,
@@ -390,7 +381,6 @@ final class ShortcutController: ObservableObject {
                     guard let self else { return }
                     self.cancelRecording()
                     if let action = self.state.finish(commit: false) { self.onAction?(action) }
-                    self.onAction?(.dismissSidebar)
                     if let eventTap = self.eventTap { CGEvent.tapEnable(tap: eventTap, enable: false) }
                     self.isRunning = false
                 }

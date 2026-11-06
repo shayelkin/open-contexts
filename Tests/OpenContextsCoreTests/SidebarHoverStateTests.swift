@@ -6,79 +6,6 @@ final class SidebarHoverStateTests: XCTestCase {
     private let edge = CGRect(x: 992, y: 300, width: 8, height: 200)
     private let expanded = CGRect(x: 740, y: 300, width: 260, height: 200)
 
-    func testShortcutExpansionReturnsToHoverAfterPointerEnters() {
-        var state = SidebarHoverState()
-        let outside = CGPoint(x: 700, y: 400)
-        let inside = CGPoint(x: 900, y: 400)
-        state.setShortcutExpanded(true)
-        XCTAssertFalse(state.update(pointer: outside, edgeFrame: edge, expandedFrame: expanded,
-                                    dragging: false, now: 0))
-        XCTAssertFalse(state.update(pointer: inside, edgeFrame: edge, expandedFrame: expanded,
-                                    dragging: false, now: 1))
-        XCTAssertFalse(state.update(pointer: outside, edgeFrame: edge, expandedFrame: expanded,
-                                    dragging: false, now: 2))
-        XCTAssertTrue(state.isShortcutExpanded)
-        XCTAssertFalse(state.update(pointer: inside, edgeFrame: edge, expandedFrame: expanded,
-                                    dragging: false, now: 2.05))
-        XCTAssertFalse(state.update(pointer: outside, edgeFrame: edge, expandedFrame: expanded,
-                                    dragging: false, now: 3))
-        XCTAssertTrue(state.update(pointer: outside, edgeFrame: edge, expandedFrame: expanded,
-                                   dragging: false, now: 3.13))
-        XCTAssertFalse(state.isExpanded)
-        XCTAssertFalse(state.isShortcutExpanded)
-        state.setShortcutExpanded(true)
-        XCTAssertFalse(state.update(pointer: outside, edgeFrame: edge, expandedFrame: expanded,
-                                    dragging: false, now: 10))
-        XCTAssertFalse(state.update(pointer: outside, edgeFrame: edge, expandedFrame: expanded,
-                                    dragging: false, now: 20))
-        XCTAssertTrue(state.isShortcutExpanded)
-    }
-
-    func testShortcutHoverExitWaitsForMenuOrDragToFinish() {
-        for menuOpen in [false, true] {
-            var state = SidebarHoverState()
-            let outside = CGPoint(x: 700, y: 400)
-            state.setShortcutExpanded(true)
-            state.update(pointer: CGPoint(x: 900, y: 400), edgeFrame: edge,
-                         expandedFrame: expanded, dragging: false, now: 0)
-            for now in [1.0, 5] {
-                XCTAssertFalse(state.update(pointer: outside, edgeFrame: edge, expandedFrame: expanded,
-                                            dragging: !menuOpen, menuOpen: menuOpen, now: now))
-                XCTAssertTrue(state.isShortcutExpanded)
-            }
-            XCTAssertFalse(state.update(pointer: outside, edgeFrame: edge, expandedFrame: expanded,
-                                        dragging: false, now: 6))
-            XCTAssertTrue(state.update(pointer: outside, edgeFrame: edge, expandedFrame: expanded,
-                                       dragging: false, now: 6.13))
-            XCTAssertFalse(state.isExpanded)
-            XCTAssertFalse(state.isShortcutExpanded)
-        }
-    }
-
-    func testShortcutKeepsExpandedAndDismissalWaitsForPointerExit() {
-        var state = SidebarHoverState()
-        let outside = CGPoint(x: 700, y: 400)
-        let inside = CGPoint(x: 900, y: 400)
-        state.setShortcutExpanded(true)
-        for now in [0.0, 1, 5] {
-            XCTAssertFalse(state.update(pointer: outside, edgeFrame: edge, expandedFrame: expanded,
-                                        dragging: false, now: now))
-            XCTAssertTrue(state.isExpanded)
-            XCTAssertTrue(state.isShortcutExpanded)
-        }
-        state.setShortcutExpanded(false)
-        XCTAssertFalse(state.isExpanded)
-        XCTAssertFalse(state.isShortcutExpanded)
-        for pointer in [inside, CGPoint(x: 996, y: 400), outside] {
-            XCTAssertFalse(state.update(pointer: pointer, edgeFrame: edge, expandedFrame: expanded,
-                                        dragging: false, now: 6))
-            XCTAssertFalse(state.isExpanded)
-        }
-        XCTAssertTrue(state.update(pointer: CGPoint(x: 996, y: 400), edgeFrame: edge,
-                                   expandedFrame: expanded, dragging: false, now: 7))
-        XCTAssertTrue(state.isExpanded)
-    }
-
     func testEdgeExpansionStaysOpenAcrossResizeEventsAndDelayedExit() {
         var state = SidebarHoverState()
         XCTAssertTrue(state.update(pointer: CGPoint(x: 996, y: 400), edgeFrame: edge,
@@ -200,7 +127,6 @@ final class SidebarHoverStateTests: XCTestCase {
             for _ in 0..<30 {
                 now += Double.random(in: 0...0.3, using: &random)
                 let menuOpen = Int.random(in: 0..<10, using: &random) == 0
-                if Int.random(in: 0..<15, using: &random) == 0 { state.setShortcutExpanded(Bool.random(using: &random)) }
                 state.update(pointer: points.randomElement(using: &random)!, edgeFrame: edge, expandedFrame: expanded,
                              dragging: false, menuOpen: menuOpen, now: now)
                 guard let deadline = state.collapseDeadline() else { continue }

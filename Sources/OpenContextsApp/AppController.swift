@@ -70,9 +70,6 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self?.availableWindows(currentAppOnly: currentAppOnly).isEmpty == false
         }
         shortcuts.onAction = { [weak self] action in self?.handle(action) }
-        shortcuts.canDismissSidebar = { [weak self] in
-            self?.sidebars.values.contains(where: { $0.canDismissShortcut }) == true
-        }
     }
 
     private func observeState() {
@@ -121,7 +118,6 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                              currentApp: self.settings.currentAppShortcut,
                                              sidebar: self.settings.sidebarShortcut)
                     self.windowService.setIncludeAllSpaces(self.includesWindowsFromAllDesktops)
-                    if self.settings.sidebarShortcut == nil { self.dismissSidebar() }
                     self.settingsWindow?.title = L10n.text("OpenContexts Settings", language: self.settings.language)
                     if self.currentAppOnly != nil { self.refreshVisibleSwitcher() }
                 }
@@ -218,17 +214,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         switch action {
         case .toggleSidebar:
             finishSwitcher(activating: nil)
-            let screens = NSScreen.screens
-            guard let screen = Self.screenIndex(containing: NSEvent.mouseLocation, frames: screens.map(\.frame))
-                    .map({ screens[$0] }) ?? NSScreen.main,
-                  let panel = sidebars[Self.displayID(for: screen)] else { return }
-            let expanded = !panel.isShortcutExpanded
-            dismissSidebar()
-            panel.setShortcutExpanded(expanded)
-        case .dismissSidebar:
-            dismissSidebar()
+            settings.toggleSidebarMode()
         case let .begin(currentAppOnly, reverse):
-            dismissSidebar()
             searchQuery = ""
             selectionBeforeSearch = nil
             self.currentAppOnly = currentAppOnly
@@ -286,10 +273,6 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         selectedIndex = SwitcherSelection.preserved(selectedID, in: switchingResults.map(\.window.id),
                                                     fallback: selectedIndex)
         updateSwitchers()
-    }
-
-    private func dismissSidebar() {
-        sidebars.values.filter { $0.isShortcutExpanded }.forEach { $0.setShortcutExpanded(false) }
     }
 
     private func selectSwitcherWindow(id: String) {
@@ -386,11 +369,6 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func windowDidBecomeKey(_ notification: Notification) {
         guard let window = notification.object as? NSWindow, window === settingsWindow else { return }
         windowService.registerLocalWindow(window, id: Self.settingsWindowID)
-    }
-
-    /// `NSRect.contains` excludes the top edge, where the pointer can rest; NSMouseInRect matches pointer coordinates.
-    static func screenIndex(containing point: NSPoint, frames: [NSRect]) -> Int? {
-        frames.firstIndex { NSMouseInRect(point, $0, false) }
     }
 
     private static func displayID(for screen: NSScreen) -> CGDirectDisplayID {

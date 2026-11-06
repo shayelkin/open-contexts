@@ -264,6 +264,21 @@ final class WindowServiceTests: XCTestCase {
         XCTAssertNotNil(WindowSpaces.uiElement(AXUIElementCreateApplication(getpid())))
     }
 
+    func testLocalWindowsArePublishedInRegistrationOrder() {
+        let service = WindowService(isTrusted: { true })
+        let ids = (0..<20).map { "local:\($0)" }.shuffled()
+        let windows = ids.map { _ in NSWindow(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: false) }
+        zip(windows, ids).forEach { service.registerLocalWindow($0, id: $1) }
+        XCTAssertEqual(service.windows.map(\.id), ids)
+        service.unregisterLocalWindow(id: ids[3])
+        service.registerLocalWindow(windows[3], id: ids[3])
+        XCTAssertEqual(service.windows.map(\.id), ids.filter { $0 != ids[3] } + [ids[3]])
+        service.registerLocalWindow(windows[0], id: ids[0])
+        XCTAssertEqual(service.windows.first?.id, ids[0], "re-registering a window moved it")
+        ids.forEach(service.unregisterLocalWindow)
+        XCTAssertTrue(service.windows.isEmpty)
+    }
+
     func testClosabilityOfOtherAppsIsAnsweredOffTheMainThread() async {
         let service = WindowService(isTrusted: { true })
         service.apply(scanResult([tracked("external")]))

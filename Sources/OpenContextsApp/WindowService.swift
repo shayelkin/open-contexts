@@ -67,6 +67,7 @@ final class WindowService: ObservableObject {
     private let logger = Logger(subsystem: "OpenContexts", category: "windows")
     private(set) var tracked: [TrackedWindow] = []
     private var localWindows: [String: WeakWindow] = [:]
+    private var localWindowOrder: [String] = []
     private var externalFocusedID: String?
     private var timer: Timer?
     private var scanInFlight = false
@@ -340,19 +341,22 @@ final class WindowService: ObservableObject {
     }
 
     func registerLocalWindow(_ window: NSWindow, id: String) {
+        if localWindows[id] == nil { localWindowOrder.append(id) }
         localWindows[id] = WeakWindow(window)
         publishWindows()
     }
 
     func unregisterLocalWindow(id: String) {
         localWindows.removeValue(forKey: id)
+        localWindowOrder.removeAll { $0 == id }
         publishWindows()
     }
 
     private func publishWindows() {
         localWindows = localWindows.filter { $0.value.value != nil }
-        let localInfos = localWindows.compactMap { id, reference -> WindowInfo? in
-            guard let window = reference.value else { return nil }
+        localWindowOrder.removeAll { localWindows[$0] == nil }
+        let localInfos = localWindowOrder.compactMap { id -> WindowInfo? in
+            guard let window = localWindows[id]?.value else { return nil }
             let appID = Bundle.main.bundleIdentifier ?? "OpenContexts"
             let appName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
                 ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String

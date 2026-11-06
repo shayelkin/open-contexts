@@ -16,17 +16,17 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
     let effect = NSVisualEffectView()
     let scroll = NSScrollView()
     let stack = FlippedStackView()
-    private let onActivate: (String) -> Void
+    let onActivate: (String) -> Void
     let canCloseWindow: (String, @escaping (Bool) -> Void) -> Void
-    private let onCloseWindow: (String) -> Void
+    let onCloseWindow: (String) -> Void
     let windowPinPosition: (String) -> Int?
-    private let onTogglePin: (String) -> Void
-    private let onMoveWindow: WindowMove
-    private let onMoveGroup: GroupMove
-    private let onCreateGroup: (String) -> Void
-    private let onRenameGroup: (String, String) -> Void
-    private let onDeleteGroup: (String) -> Void
-    private let onResize: (CGFloat) -> Void
+    let onTogglePin: (String) -> Void
+    let onMoveWindow: WindowMove
+    let onMoveGroup: GroupMove
+    let onCreateGroup: (String) -> Void
+    let onRenameGroup: (String, String) -> Void
+    let onDeleteGroup: (String) -> Void
+    let onResize: (CGFloat) -> Void
     let displayScreen: NSScreen
     private var alwaysVisible = false
     private var fullscreen = false
@@ -1134,8 +1134,8 @@ final class SwitcherPanel: NSPanel {
     private let emptyTitle = NSTextField(labelWithString: "")
     private let emptyHint = NSTextField(labelWithString: "")
     let emptyState = NSStackView()
-    private let onActivate: (String) -> Void
-    private let onSelect: (String) -> Void
+    let onActivate: (String) -> Void
+    let onSelect: (String) -> Void
     let displayScreen: NSScreen
     private(set) weak var selectedRow: SwitcherRow?
     private var rendered: RenderedResults?

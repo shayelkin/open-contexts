@@ -6,27 +6,47 @@ import SwiftUI
 @MainActor
 final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private static let settingsWindowID = "local:settings"
-    private let windowService = WindowService()
-    private let groupStore = GroupStore()
-    private let shortcuts = ShortcutController()
-    private let settings = AppSettings()
+    private let windowService: WindowService
+    private let groupStore: GroupStore
+    private let shortcuts: ShortcutController
+    private let settings: AppSettings
+    private let frontmostProcessID: () -> pid_t?
+    private let terminate: () -> Void
 
-    private var sidebars: [CGDirectDisplayID: SidebarPanel] = [:]
-    private var switchers: [CGDirectDisplayID: SwitcherPanel] = [:]
+    private(set) var sidebars: [CGDirectDisplayID: SidebarPanel] = [:]
+    private(set) var switchers: [CGDirectDisplayID: SwitcherPanel] = [:]
     private var cancellables: Set<AnyCancellable> = []
-    private var settingsWindow: NSWindow?
-    private var statusItem: NSStatusItem?
+    private(set) var settingsWindow: NSWindow?
+    private(set) var statusItem: NSStatusItem?
     private var statusMenuLanguage: AppLanguage?
-    private var groupFlushTimer: Timer?
+    private(set) var groupFlushTimer: Timer?
 
-    private var switchingResults: [WindowSearch.Match] = []
-    private var switchingWindowCount = 0
-    private var searchQuery = ""
+    private(set) var switchingResults: [WindowSearch.Match] = []
+    private(set) var switchingWindowCount = 0
+    private(set) var searchQuery = ""
     private var selectionBeforeSearch: String?
-    private var selectedIndex = 0
-    private var currentAppOnly: Bool?
-    private var currentAppPID: pid_t?
+    private(set) var selectedIndex = 0
+    private(set) var currentAppOnly: Bool?
+    private(set) var currentAppPID: pid_t?
     private var didRestoreGroups = false
+
+    override convenience init() {
+        self.init(windowService: WindowService(), groupStore: GroupStore(), shortcuts: ShortcutController(),
+                  settings: AppSettings(),
+                  frontmostProcessID: { NSWorkspace.shared.frontmostApplication?.processIdentifier },
+                  terminate: { NSApp.terminate(nil) })
+    }
+
+    init(windowService: WindowService, groupStore: GroupStore, shortcuts: ShortcutController, settings: AppSettings,
+         frontmostProcessID: @escaping () -> pid_t?, terminate: @escaping () -> Void) {
+        self.windowService = windowService
+        self.groupStore = groupStore
+        self.shortcuts = shortcuts
+        self.settings = settings
+        self.frontmostProcessID = frontmostProcessID
+        self.terminate = terminate
+        super.init()
+    }
 
     private var includesWindowsFromAllDesktops: Bool {
         settings.showWindowsFromAllDesktops || settings.showSidebarWindowsFromAllDesktops
@@ -205,7 +225,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func availableWindows(currentAppOnly: Bool, pid: pid_t? = nil) -> [WindowInfo] {
         let windows = windowService.windows.filter { settings.showWindowsFromAllDesktops || $0.isOnCurrentSpace }
         guard currentAppOnly else { return windows }
-        let processID = pid ?? NSWorkspace.shared.frontmostApplication?.processIdentifier
+        let processID = pid ?? frontmostProcessID()
         return windows.filter { $0.processID == processID }
     }
 
@@ -219,7 +239,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
             searchQuery = ""
             selectionBeforeSearch = nil
             self.currentAppOnly = currentAppOnly
-            currentAppPID = currentAppOnly ? NSWorkspace.shared.frontmostApplication?.processIdentifier : nil
+            currentAppPID = currentAppOnly ? frontmostProcessID() : nil
             switchingResults = WindowSwitcher.filter(availableWindows(currentAppOnly: currentAppOnly, pid: currentAppPID),
                                                      query: "", allSpaces: settings.showWindowsFromAllDesktops)
             switchingWindowCount = switchingResults.count
@@ -352,7 +372,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc private func quit() {
-        NSApp.terminate(nil)
+        terminate()
     }
 
     func windowWillClose(_ notification: Notification) {

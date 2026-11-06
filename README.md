@@ -18,11 +18,14 @@ xcodegen generate
 xcodebuild -project OpenContexts.xcodeproj -scheme OpenContexts -configuration Release build
 ```
 
-### Testing
+## Testing
 
 Run the tests with `swift test`.
 
-#### Known Issues
+Some tests need Accessibility access and are skipped without it. Grant it to the app that launches
+`swift test` (e.g. Terminal) in System Settings › Privacy & Security › Accessibility.
+
+### Known Issues
 
 - Tests that verify windows activation could fail if another app takes focus while they run
   (for example, because the user is doing some work while the tests run in the background). Leave

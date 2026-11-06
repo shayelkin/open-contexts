@@ -48,6 +48,12 @@ public final class GroupStore: ObservableObject {
     private struct WindowKey: Hashable {
         let appID: String
         let title: String
+
+        /// Whitespace-only titles count as untitled, as in `titleKey`.
+        init(appID: String, title: String) {
+            self.appID = appID
+            self.title = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "" : title
+        }
     }
 
     private let fileURL: URL
@@ -487,7 +493,7 @@ public final class GroupStore: ObservableObject {
         let moved = records[index]
         let key = WindowKey(appID: moved.appID, title: moved.title)
         guard moved.pinnedPosition != nil || windowsByGroup[groupID, default: []].contains(where: {
-            $0.id != savedID && $0.appID == key.appID && $0.title == key.title && $0.pinnedPosition != nil
+            $0.id != savedID && WindowKey(appID: $0.appID, title: $0.title) == key && $0.pinnedPosition != nil
         }) else { return }
         windowsByGroup[groupID]?[index].pinnedPosition = requested
     }
@@ -525,7 +531,7 @@ public final class GroupStore: ObservableObject {
                 var winner = saved
                 if winner.pinnedPosition == nil, pinnedKeys.contains(key), !protectedKeys.contains(key) {
                     winner.pinnedPosition = oldWindows.first(where: {
-                        $0.appID == key.appID && $0.title == key.title && $0.pinnedPosition != nil
+                        WindowKey(appID: $0.appID, title: $0.title) == key && $0.pinnedPosition != nil
                     })?.pinnedPosition
                 }
                 return winner
@@ -534,7 +540,7 @@ public final class GroupStore: ObservableObject {
             let distinctSlots = slots.filter { seenPinnedKeys.insert($0.0).inserted }
             for (key, index) in distinctSlots.sorted(by: { $0.1 < $1.1 }) {
                 guard let current = keptWindows.firstIndex(where: {
-                    $0.appID == key.appID && $0.title == key.title && $0.pinnedPosition != nil
+                    WindowKey(appID: $0.appID, title: $0.title) == key && $0.pinnedPosition != nil
                 }) else { continue }
                 var pinned = keptWindows.remove(at: current)
                 pinned.pinnedPosition = index

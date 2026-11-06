@@ -406,6 +406,21 @@ final class GroupStoreTests: XCTestCase {
             .compactMap { $0["title"] as? String }, ["New"])
     }
 
+    func testWhitespaceOnlyTitlesCountAsTheSameUntitledWindow() throws {
+        let fileURL = temporaryFileURL()
+        try writeState([
+            "groups": [["id": GroupStore.ungroupedID, "name": "Ungrouped"], ["id": "work", "name": "Work"]],
+            "windowsByGroup": ["work": [savedWindow("blank", title: ""), savedWindow("spaces", title: "  "),
+                                        savedWindow("newline", title: "\n"), savedWindow("titled", title: " Doc ")]]
+        ], to: fileURL)
+        let store = GroupStore(fileURL: fileURL)
+        store.createGroup(name: "Trigger normalization")
+        let ids = try persistedWindows(at: fileURL, in: "work").compactMap { $0["id"] as? String }
+        XCTAssertEqual(ids.filter { ["blank", "spaces", "newline"].contains($0) }.count, 1,
+                       "untitled records that differ only in whitespace were kept as different windows: \(ids)")
+        XCTAssertEqual(ids.last, "titled")
+    }
+
     func testUngroupedNameIsNeutralAndAnyStoredNameLoads() throws {
         let fresh = temporaryFileURL()
         let store = GroupStore(fileURL: fresh)

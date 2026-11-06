@@ -16,6 +16,8 @@ extension SidebarPanel {
         return rows.count == windowIDs.count && rows.allSatisfy { row in
             guard let menu = row.menu, row.subviews.allSatisfy({ $0.menu === menu }) else { return false }
             menuNeedsUpdate(menu)
+            var closable: Bool?
+            canCloseWindow(menu.title) { closable = $0 }
             return menu.items.first?.title == L10n.text("Pin", language: language)
                 && menu.items.first?.representedObject as? String == menu.title
                 && menu.items.first?.state == (windowPinPosition(menu.title) != nil ? .on : .off)
@@ -23,7 +25,7 @@ extension SidebarPanel {
                 && menu.items[1].title == L10n.text("Close Window", language: language)
                 && menu.items[1].action == #selector(closeMenuWindow(_:))
                 && menu.items[1].representedObject as? String == menu.title
-                && menu.items[1].isEnabled == canCloseWindow(menu.title)
+                && menu.items[1].isEnabled == closable
                 && Array(menu.items.dropFirst(3).prefix(windowIDs.count))
                     .compactMap { $0.representedObject as? String } == windowIDs
                 && menu.items.suffix(2).map(\.title) == [L10n.text("Hide App", language: language),

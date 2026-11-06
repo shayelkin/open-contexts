@@ -42,6 +42,12 @@ final class WindowServiceTests: XCTestCase {
         XCTAssertEqual(service.windows.filter { $0.id == id }.count, 1)
     }
 
+    private func closable(_ service: WindowService, _ id: String) -> Bool? {
+        var result: Bool?
+        service.canClose(id) { result = $0 }
+        return result
+    }
+
     func testClosingTargetsOnlyClosableLocalWindow() {
         let service = WindowService()
         let windows = (0..<2).map { _ in
@@ -55,8 +61,8 @@ final class WindowServiceTests: XCTestCase {
             service.registerLocalWindow(window, id: "close-\(index)")
         }
         XCTAssertTrue(windows.allSatisfy(\.isVisible))
-        XCTAssertTrue(service.canClose("close-0"))
-        XCTAssertFalse(service.canClose("missing"))
+        XCTAssertEqual(closable(service, "close-0"), true)
+        XCTAssertEqual(closable(service, "missing"), false)
         service.close("missing")
         service.close("close-0")
         XCTAssertFalse(windows[0].isVisible)
@@ -64,7 +70,7 @@ final class WindowServiceTests: XCTestCase {
 
         windows[1].standardWindowButton(.closeButton)?.isEnabled = false
         service.close("close-1")
-        XCTAssertFalse(service.canClose("close-1"))
+        XCTAssertEqual(closable(service, "close-1"), false)
         XCTAssertTrue(windows[1].isVisible)
 
         windows[1].standardWindowButton(.closeButton)?.isEnabled = true
@@ -206,6 +212,19 @@ final class WindowServiceTests: XCTestCase {
         XCTAssertNil(WindowSpaces.uiElement("text" as CFString))
         XCTAssertNil(WindowSpaces.uiElement([] as CFArray))
         XCTAssertNotNil(WindowSpaces.uiElement(AXUIElementCreateApplication(getpid())))
+    }
+
+    func testClosabilityOfOtherAppsIsAnsweredOffTheMainThread() async {
+        let service = WindowService(isTrusted: { true })
+        service.apply(scanResult([tracked("external")]))
+        let gate = DispatchSemaphore(value: 0)
+        service.scanQueue.async { gate.wait() }
+        var answer: Bool?
+        service.canClose("external") { answer = $0 }
+        XCTAssertNil(answer, "the Accessibility query ran synchronously on the main thread")
+        gate.signal()
+        for _ in 0..<100 where answer == nil { try? await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(answer, false, "a window without a close button was reported closable")
     }
 
     func testDuplicateWindowIDsAreDeduplicatedInsteadOfCrashing() {

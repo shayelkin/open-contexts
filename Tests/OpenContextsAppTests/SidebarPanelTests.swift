@@ -38,7 +38,7 @@ final class SidebarPanelTests: XCTestCase {
         sidebar = SidebarPanel(
             screen: screen,
             onActivate: { _ in },
-            canCloseWindow: { $0 != "smoke-2" },
+            canCloseWindow: { id, completion in completion(id != "smoke-2") },
             onCloseWindow: { [unowned self] in self.closedWindowIDs.append($0) },
             windowPinPosition: { $0 == "smoke-1" ? 1 : nil },
             onTogglePin: { _ in },

@@ -293,22 +293,32 @@ final class WindowService: ObservableObject {
         }
     }
 
-    func canClose(_ id: String) -> Bool {
+    /// Reports whether the window can be closed. Other apps are asked on the scan queue, since an
+    /// unresponsive app would otherwise block the main thread for the Accessibility timeout.
+    func canClose(_ id: String, completion: @escaping @MainActor (Bool) -> Void) {
         if let window = localWindows[id]?.value {
-            return window.standardWindowButton(.closeButton)?.isEnabled == true
+            completion(window.standardWindowButton(.closeButton)?.isEnabled == true)
+            return
         }
-        guard hasAccessibility, let window = tracked.first(where: { $0.id == id }) else { return false }
-        return Self.closeButton(of: window.element) != nil
+        guard hasAccessibility, let window = tracked.first(where: { $0.id == id }) else {
+            completion(false)
+            return
+        }
+        let element = window.element
+        scanQueue.async {
+            let closable = Self.closeButton(of: element) != nil
+            Task { @MainActor in completion(closable) }
+        }
     }
 
     func close(_ id: String) {
-        guard canClose(id) else { return }
         if let window = localWindows[id]?.value {
+            guard window.standardWindowButton(.closeButton)?.isEnabled == true else { return }
             window.performClose(nil)
             publishWindows()
             return
         }
-        guard let window = tracked.first(where: { $0.id == id }) else { return }
+        guard hasAccessibility, let window = tracked.first(where: { $0.id == id }) else { return }
         scanQueue.async { [weak self] in
             guard let button = Self.closeButton(of: window.element) else { return }
             let result = AXUIElementPerformAction(button, kAXPressAction as CFString)

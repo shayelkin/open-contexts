@@ -17,7 +17,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
     let scroll = NSScrollView()
     let stack = FlippedStackView()
     private let onActivate: (String) -> Void
-    let canCloseWindow: (String) -> Bool
+    let canCloseWindow: (String, @escaping (Bool) -> Void) -> Void
     private let onCloseWindow: (String) -> Void
     let windowPinPosition: (String) -> Int?
     private let onTogglePin: (String) -> Void
@@ -96,7 +96,8 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
     }
 
     init(screen: NSScreen, onActivate: @escaping (String) -> Void,
-         canCloseWindow: @escaping (String) -> Bool, onCloseWindow: @escaping (String) -> Void,
+         canCloseWindow: @escaping (String, @escaping (Bool) -> Void) -> Void,
+         onCloseWindow: @escaping (String) -> Void,
          windowPinPosition: @escaping (String) -> Int?,
          onTogglePin: @escaping (String) -> Void,
          onMoveWindow: @escaping WindowMove, onMoveGroup: @escaping GroupMove,
@@ -395,7 +396,8 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
                                action: #selector(closeMenuWindow(_:)), keyEquivalent: "")
         close.target = self
         close.representedObject = target.id
-        close.isEnabled = canCloseWindow(target.id)
+        close.isEnabled = false
+        canCloseWindow(target.id) { [weak close] in close?.isEnabled = $0 }
         menu.addItem(close)
         menu.addItem(.separator())
         let windows = renderedGroups.flatMap { renderedWindows[$0.id, default: []] }
@@ -426,7 +428,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
     @objc func closeMenuWindow(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String,
               renderedWindows.values.joined().contains(where: { $0.id == id }),
-              canCloseWindow(id) else { return }
+              sender.isEnabled else { return }
         onCloseWindow(id)
     }
 

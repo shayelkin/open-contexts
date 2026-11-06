@@ -162,7 +162,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
     <key>CFBundleExecutable</key><string>OpenContexts</string>
-    <key>CFBundleIdentifier</key><string>local.opencontexts.app</string>
+    <key>CFBundleIdentifier</key><string>com.shayelkin.opencontexts</string>
     <key>CFBundleName</key><string>Open Contexts</string>
     <key>CFBundleDisplayName</key><string>Open Contexts</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>

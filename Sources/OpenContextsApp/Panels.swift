@@ -1835,8 +1835,8 @@ final class CallbackButton: NSButton {
 }
 
 private extension NSPasteboard.PasteboardType {
-    static let openContextsWindow = Self("com.opencontexts.window")
-    static let openContextsGroup = Self("com.opencontexts.group")
+    static let openContextsWindow = Self("com.shayelkin.opencontexts.window")
+    static let openContextsGroup = Self("com.shayelkin.opencontexts.group")
 }
 
 extension CGRect {

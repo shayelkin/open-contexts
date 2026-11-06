@@ -176,4 +176,25 @@ final class ShortcutControllerTests: XCTestCase {
         XCTAssertEqual(controller.modifierAction(flags: .maskControl), .commit)
         XCTAssertTrue(controller.state.searchQuery.isEmpty)
     }
+
+    func testReleasedControllerTearsDownItsEventTap() throws {
+        try XCTSkipUnless(AXIsProcessTrusted(), "creating an event tap needs Accessibility trust")
+        var controller: ShortcutController? = ShortcutController()
+        weak var released = controller
+        XCTAssertTrue(try XCTUnwrap(controller).start())
+        let tap = try XCTUnwrap(controller?.eventTap)
+        XCTAssertTrue(CFMachPortIsValid(tap))
+        controller = nil
+        XCTAssertNil(released, "the event tap or its observers kept the controller alive")
+        XCTAssertFalse(CFMachPortIsValid(tap), "the event tap outlived its controller")
+
+        let stopped = ShortcutController()
+        XCTAssertTrue(stopped.start())
+        let stoppedTap = try XCTUnwrap(stopped.eventTap)
+        stopped.stop()
+        XCTAssertNil(stopped.eventTap)
+        XCTAssertFalse(CFMachPortIsValid(stoppedTap))
+        XCTAssertTrue(stopped.start(), "a stopped controller could not start again")
+        stopped.stop()
+    }
 }

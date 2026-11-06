@@ -130,12 +130,20 @@ final class ShortcutController: ObservableObject {
     private(set) var currentAppShortcut = KeyboardShortcut.currentApp
     private(set) var sidebarShortcut: KeyboardShortcut? = .sidebar
 
-    private var eventTap: CFMachPort?
+    private(set) var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    private var tapContext: Unmanaged<ShortcutTapContext>?
     private var workspaceObservers: [NSObjectProtocol] = []
     private(set) var state = ShortcutState()
     private(set) var recordingMonitor: Any?
     private var saveRecording: ((KeyboardShortcut) -> Bool)?
+
+    deinit {
+        if let runLoopSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes) }
+        if let eventTap { CFMachPortInvalidate(eventTap) }
+        tapContext?.release()
+        workspaceObservers.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
+    }
 
     func configure(allWindows: KeyboardShortcut, currentApp: KeyboardShortcut,
                    sidebar: KeyboardShortcut? = .sidebar) {
@@ -200,14 +208,20 @@ final class ShortcutController: ObservableObject {
 
         let mask = CGEventMask(1 << CGEventType.keyDown.rawValue)
             | CGEventMask(1 << CGEventType.flagsChanged.rawValue)
+        // The tap holds a retained context with a weak reference, so it never points at a freed controller.
+        let context = Unmanaged.passRetained(ShortcutTapContext(self))
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
             options: .defaultTap,
             eventsOfInterest: mask,
             callback: shortcutEventCallback,
-            userInfo: Unmanaged.passUnretained(self).toOpaque()
-        ) else { return false }
+            userInfo: context.toOpaque()
+        ) else {
+            context.release()
+            return false
+        }
+        tapContext = context
 
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
         eventTap = tap
@@ -230,6 +244,8 @@ final class ShortcutController: ObservableObject {
             CGEvent.tapEnable(tap: tap, enable: false)
             CFMachPortInvalidate(tap)
         }
+        tapContext?.release()
+        tapContext = nil
         workspaceObservers.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
         workspaceObservers = []
         runLoopSource = nil
@@ -379,8 +395,18 @@ final class ShortcutController: ObservableObject {
     }
 }
 
+private final class ShortcutTapContext {
+    weak var controller: ShortcutController?
+
+    init(_ controller: ShortcutController) {
+        self.controller = controller
+    }
+}
+
 private let shortcutEventCallback: CGEventTapCallBack = { _, type, event, userInfo in
     guard let userInfo else { return Unmanaged.passUnretained(event) }
-    let controller = Unmanaged<ShortcutController>.fromOpaque(userInfo).takeUnretainedValue()
-    return MainActor.assumeIsolated { controller.handle(type: type, event: event) }
+    let context = Unmanaged<ShortcutTapContext>.fromOpaque(userInfo).takeUnretainedValue()
+    return MainActor.assumeIsolated {
+        context.controller?.handle(type: type, event: event) ?? Unmanaged.passUnretained(event)
+    }
 }

@@ -4,7 +4,7 @@ import XCTest
 
 final class LocalizationTests: XCTestCase {
     func testEveryLanguageHasTheSameNonEmptyKeys() throws {
-        let resources = try XCTUnwrap(L10n.resources)
+        let resources = L10n.resources
         var expected: Set<String>?
         for language in AppLanguage.allCases where language != .system {
             let path = try XCTUnwrap(resources.path(forResource: language.rawValue, ofType: "lproj"), "\(language)")
@@ -30,7 +30,7 @@ final class LocalizationTests: XCTestCase {
     }
 
     func testTranslationsUseTheSameFormatSpecifiersAsTheirKeys() throws {
-        let resources = try XCTUnwrap(L10n.resources)
+        let resources = L10n.resources
         let specifier = try NSRegularExpression(pattern: "%(?:\\d+\\$)?[-+ 0#]*\\d*(?:\\.\\d+)?(?:hh|h|ll|l|q|L|z|t|j)?[@dDiuUxXoOfFeEgGcCsSpaA%]")
         func specifiers(_ text: String) -> [String] {
             specifier.matches(in: text, range: NSRange(text.startIndex..., in: text))

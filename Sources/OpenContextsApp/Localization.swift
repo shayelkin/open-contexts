@@ -23,10 +23,9 @@ enum AppLanguage: String, CaseIterable, Identifiable {
 }
 
 enum L10n {
-    static let resources: Bundle? = Bundle.module
+    static let resources = Bundle.module
 
     static func text(_ key: String, language: AppLanguage) -> String {
-        guard let resources else { return key }
         let path = resources.path(forResource: language.resolvedCode, ofType: "lproj")
         let bundle = path.flatMap(Bundle.init(path:)) ?? resources
         return bundle.localizedString(forKey: key, value: key, table: nil)

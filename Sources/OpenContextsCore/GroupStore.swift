@@ -17,7 +17,6 @@ public final class GroupStore: ObservableObject {
 
     @Published public private(set) var groups: [WindowGroup]
     @Published public private(set) var revision = 0
-    public private(set) var persistenceError: String?
     public private(set) var persistenceErrorOperation: PersistenceErrorOperation?
     public private(set) var persistenceErrorDetail: String?
     /// Where an unreadable groups file was moved so that a fresh one could be written.
@@ -59,7 +58,7 @@ public final class GroupStore: ObservableObject {
 
     public init(fileURL: URL? = nil) {
         self.fileURL = fileURL ?? Self.defaultFileURL
-        self.groups = [WindowGroup(id: Self.ungroupedID, name: "未分组")]
+        self.groups = [WindowGroup(id: Self.ungroupedID, name: "Ungrouped")]
         self.windowsByGroup = [Self.ungroupedID: []]
         load()
     }
@@ -512,7 +511,8 @@ public final class GroupStore: ObservableObject {
             let state = try JSONDecoder().decode(State.self, from: Data(contentsOf: fileURL))
             let ids = state.groups.map(\.id)
             let savedCount = state.windowsByGroup.values.reduce(0) { $0 + $1.count }
-            guard ids.first == Self.ungroupedID, state.groups.first?.name == "未分组",
+            // The ungrouped group's stored name is never shown, so files written with any name load.
+            guard ids.first == Self.ungroupedID,
                   Set(ids).count == ids.count,
                   Set(state.windowsByGroup.keys).isSubset(of: Set(ids)),
                   state.windowsByGroup.values.flatMap({ $0 }).allSatisfy({
@@ -525,7 +525,6 @@ public final class GroupStore: ObservableObject {
             windowsByGroup = state.windowsByGroup
             for id in ids where windowsByGroup[id] == nil { windowsByGroup[id] = [] }
         } catch {
-            persistenceError = "无法读取分组数据：\(error.localizedDescription)"
             persistenceErrorOperation = .read
             persistenceErrorDetail = error.localizedDescription
             moveUnreadableFileAside()
@@ -559,13 +558,11 @@ public final class GroupStore: ObservableObject {
             let data = try JSONEncoder().encode(State(groups: groups, windowsByGroup: persistedWindows))
             try data.write(to: fileURL, options: .atomic)
             if persistenceErrorOperation == .write {
-                persistenceError = nil
                 persistenceErrorOperation = nil
                 persistenceErrorDetail = nil
             }
             hasPendingChanges = false
         } catch {
-            persistenceError = "无法保存分组数据：\(error.localizedDescription)"
             persistenceErrorOperation = .write
             persistenceErrorDetail = error.localizedDescription
         }

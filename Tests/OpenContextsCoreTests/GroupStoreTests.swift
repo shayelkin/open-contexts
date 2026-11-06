@@ -56,10 +56,10 @@ final class GroupStoreTests: XCTestCase {
         store.renameGroup(id: work, name: "Focus")
         store.renameGroup(id: GroupStore.ungroupedID, name: "Nope")
         store.moveGroup(id: later, before: work)
-        XCTAssertEqual(store.groups.map(\.name), ["未分组", "Later", "Focus"])
+        XCTAssertEqual(store.groups.map(\.name), ["Ungrouped", "Later", "Focus"])
 
         store.deleteGroup(id: work)
-        XCTAssertEqual(store.groups.map(\.name), ["未分组", "Later"])
+        XCTAssertEqual(store.groups.map(\.name), ["Ungrouped", "Later"])
         XCTAssertEqual(store.windows(in: GroupStore.ungroupedID).map(\.id), ["3", "1", "2"])
     }
 
@@ -274,7 +274,7 @@ final class GroupStoreTests: XCTestCase {
         try corrupt.write(to: fileURL)
 
         let store = GroupStore(fileURL: fileURL)
-        XCTAssertNotNil(store.persistenceError)
+        XCTAssertNotNil(store.persistenceErrorOperation)
         XCTAssertEqual(store.persistenceErrorOperation, .read)
         XCTAssertFalse(store.persistenceErrorDetail?.isEmpty ?? true)
         let backup = try XCTUnwrap(store.persistenceBackupURL)
@@ -287,6 +287,26 @@ final class GroupStoreTests: XCTestCase {
         XCTAssertEqual(GroupStore(fileURL: fileURL).groups.map(\.name).last, "Fresh", "changes after recovery were lost")
         XCTAssertEqual(store.persistenceErrorOperation, .read, "a later save hid the read error")
         XCTAssertNotNil(store.persistenceErrorDetail)
+    }
+
+    func testUngroupedNameIsNeutralAndAnyStoredNameLoads() throws {
+        let fresh = temporaryFileURL()
+        let store = GroupStore(fileURL: fresh)
+        store.createGroup(name: "Work")
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: fresh)) as? [String: Any])
+        let stored = try XCTUnwrap(root["groups"] as? [[String: Any]])
+        XCTAssertEqual(stored.first?["name"] as? String, "Ungrouped")
+
+        for name in ["未分组", "Ungrouped", "Sans groupe", ""] {
+            let fileURL = temporaryFileURL()
+            try writeState([
+                "groups": [["id": GroupStore.ungroupedID, "name": name], ["id": "work", "name": "Work"]],
+                "windowsByGroup": ["work": [savedWindow("doc", title: "Doc")]]
+            ], to: fileURL)
+            let loaded = GroupStore(fileURL: fileURL)
+            XCTAssertNil(loaded.persistenceErrorOperation, name)
+            XCTAssertEqual(loaded.groups.map(\.id), [GroupStore.ungroupedID, "work"], name)
+        }
     }
 
     func testUnmovableCorruptPersistenceIsNeverOverwritten() throws {
@@ -678,7 +698,7 @@ final class GroupStoreTests: XCTestCase {
         ], to: fileURL)
 
         let restarted = GroupStore(fileURL: fileURL)
-        XCTAssertNil(restarted.persistenceError)
+        XCTAssertNil(restarted.persistenceErrorOperation)
         XCTAssertEqual(try persistedWindows(at: fileURL, in: "work").compactMap { $0["id"] as? String },
                        ["work-1", "work-2"])
         restarted.reconcile([window("a", title: "Same"), window("b", title: "Same")])
@@ -734,7 +754,7 @@ final class GroupStoreTests: XCTestCase {
         XCTAssertEqual(store.windows(in: GroupStore.ungroupedID).map(\.id), ["old"])
 
         let reloaded = GroupStore(fileURL: fileURL)
-        XCTAssertNil(reloaded.persistenceError)
+        XCTAssertNil(reloaded.persistenceErrorOperation)
         XCTAssertEqual(try persistedWindows(at: fileURL, in: work).count, 2)
     }
 
@@ -766,7 +786,7 @@ final class GroupStoreTests: XCTestCase {
         XCTAssertEqual(persistedPin.first?["pinnedPosition"] as? Int, 1)
 
         let restarted = GroupStore(fileURL: fileURL)
-        XCTAssertNil(restarted.persistenceError)
+        XCTAssertNil(restarted.persistenceErrorOperation)
         restarted.reconcile([window("new-a", title: "A"), window("new-b", title: "B")])
         XCTAssertTrue(restarted.isPinned(id: "new-b"))
         restarted.togglePin(id: "new-b")
@@ -785,7 +805,7 @@ final class GroupStoreTests: XCTestCase {
         ], to: fileURL)
         let original = try Data(contentsOf: fileURL)
         let store = GroupStore(fileURL: fileURL)
-        XCTAssertNotNil(store.persistenceError)
+        XCTAssertNotNil(store.persistenceErrorOperation)
         store.createGroup(name: "After recovery")
         XCTAssertEqual(try Data(contentsOf: try XCTUnwrap(store.persistenceBackupURL)), original)
         XCTAssertNotEqual(try Data(contentsOf: fileURL), original)

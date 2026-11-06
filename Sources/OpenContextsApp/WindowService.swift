@@ -26,6 +26,8 @@ final class WindowService: ObservableObject {
         func cancel() { lock.withLock { cancelled = true } }
     }
 
+    // AXUIElement is not Sendable. These values cross to the main actor only to be stored and compared;
+    // every Accessibility message to their elements is sent from `scanQueue`.
     struct TrackedWindow: @unchecked Sendable {
         let id: String
         let element: AXUIElement

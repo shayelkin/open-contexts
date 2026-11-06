@@ -4,6 +4,7 @@ import Darwin
 import OpenContextsCore
 
 enum WindowSpaces {
+    // Holds AXUIElements that are only messaged from WindowService.scanQueue.
     struct DiscoveryState: @unchecked Sendable {
         var cursor: UInt64 = 0
         var unresolved: Set<CGWindowID> = []

@@ -335,9 +335,16 @@ struct SettingsView: View {
             if let detail = groupStore.persistenceErrorDetail,
                let operation = groupStore.persistenceErrorOperation {
                 settingsRow("Groups") {
-                    Text(L10n.format(operation == .read ? "Could not read group data: %@" : "Could not save group data: %@",
-                                     detail, language: language))
-                        .foregroundStyle(.red)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(L10n.format(operation == .read ? "Could not read group data: %@" : "Could not save group data: %@",
+                                         detail, language: language))
+                            .foregroundStyle(.red)
+                        if operation == .read, let backup = groupStore.persistenceBackupURL {
+                            Text(L10n.format("The unreadable file was moved to %@.", backup.path, language: language))
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
+                    }
                 }
             }
         }

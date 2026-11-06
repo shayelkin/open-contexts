@@ -266,7 +266,7 @@ final class GroupStoreTests: XCTestCase {
             .compactMap { $0["documentURL"] as? String }, [])
     }
 
-    func testCorruptPersistenceIsReportedAndNeverOverwritten() throws {
+    func testCorruptPersistenceIsReportedAndMovedAsideBeforeWriting() throws {
         let fileURL = temporaryFileURL()
         let corrupt = Data("not json".utf8)
         try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(),
@@ -277,8 +277,33 @@ final class GroupStoreTests: XCTestCase {
         XCTAssertNotNil(store.persistenceError)
         XCTAssertEqual(store.persistenceErrorOperation, .read)
         XCTAssertFalse(store.persistenceErrorDetail?.isEmpty ?? true)
+        let backup = try XCTUnwrap(store.persistenceBackupURL)
+        XCTAssertEqual(backup.deletingLastPathComponent(), fileURL.deletingLastPathComponent())
+        XCTAssertEqual(try Data(contentsOf: backup), corrupt, "the unreadable file was not kept")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
+
+        store.createGroup(name: "Fresh")
+        XCTAssertEqual(try Data(contentsOf: backup), corrupt)
+        XCTAssertEqual(GroupStore(fileURL: fileURL).groups.map(\.name).last, "Fresh", "changes after recovery were lost")
+        XCTAssertEqual(store.persistenceErrorOperation, .read, "a later save hid the read error")
+        XCTAssertNotNil(store.persistenceErrorDetail)
+    }
+
+    func testUnmovableCorruptPersistenceIsNeverOverwritten() throws {
+        let fileURL = temporaryFileURL()
+        let directory = fileURL.deletingLastPathComponent()
+        let corrupt = Data("not json".utf8)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try corrupt.write(to: fileURL)
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: directory.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: directory.path) }
+
+        let store = GroupStore(fileURL: fileURL)
+        XCTAssertEqual(store.persistenceErrorOperation, .read)
+        XCTAssertNil(store.persistenceBackupURL)
         store.createGroup(name: "In memory")
         XCTAssertEqual(try Data(contentsOf: fileURL), corrupt)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path), ["groups.json"])
     }
 
     func testUnchangedReconcileIsNoOpAndDuplicateIDsCreateOneRecord() throws {
@@ -750,7 +775,7 @@ final class GroupStoreTests: XCTestCase {
                        "an unpinned ungrouped window stayed persisted")
     }
 
-    func testInvalidPinnedPositionBlocksPersistence() throws {
+    func testInvalidPinnedPositionIsTreatedAsUnreadable() throws {
         let fileURL = temporaryFileURL()
         var invalid = savedWindow("bad", title: "Bad")
         invalid["pinnedPosition"] = -1
@@ -761,8 +786,9 @@ final class GroupStoreTests: XCTestCase {
         let original = try Data(contentsOf: fileURL)
         let store = GroupStore(fileURL: fileURL)
         XCTAssertNotNil(store.persistenceError)
-        store.createGroup(name: "Must not overwrite")
-        XCTAssertEqual(try Data(contentsOf: fileURL), original)
+        store.createGroup(name: "After recovery")
+        XCTAssertEqual(try Data(contentsOf: try XCTUnwrap(store.persistenceBackupURL)), original)
+        XCTAssertNotEqual(try Data(contentsOf: fileURL), original)
     }
 
     func testPinningUnsavedLiveWindowKeepsVisiblePosition() throws {

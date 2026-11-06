@@ -30,6 +30,7 @@
 "Retry" = "再試行";
 "Could not read group data: %@" = "グループデータを読み込めません：%@";
 "Could not save group data: %@" = "グループデータを保存できません：%@";
+"The unreadable file was moved to %@." = "読み込めないファイルは %@ に移動しました。";
 "Settings…" = "設定…";
 "Grant Accessibility Access…" = "アクセシビリティを許可…";
 "Quit OpenContexts" = "OpenContexts を終了";

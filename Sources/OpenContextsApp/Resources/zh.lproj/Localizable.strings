@@ -30,6 +30,7 @@
 "Retry" = "重试";
 "Could not read group data: %@" = "无法读取分组数据：%@";
 "Could not save group data: %@" = "无法保存分组数据：%@";
+"The unreadable file was moved to %@." = "无法读取的文件已移至 %@。";
 "Settings…" = "设置…";
 "Grant Accessibility Access…" = "授予辅助功能权限…";
 "Quit OpenContexts" = "退出 OpenContexts";

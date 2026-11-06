@@ -30,6 +30,7 @@
 "Retry" = "Retry";
 "Could not read group data: %@" = "Could not read group data: %@";
 "Could not save group data: %@" = "Could not save group data: %@";
+"The unreadable file was moved to %@." = "The unreadable file was moved to %@.";
 "Settings…" = "Settings…";
 "Grant Accessibility Access…" = "Grant Accessibility Access…";
 "Quit OpenContexts" = "Quit OpenContexts";

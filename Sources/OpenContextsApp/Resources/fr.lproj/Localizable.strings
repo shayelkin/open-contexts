@@ -30,6 +30,7 @@
 "Retry" = "Réessayer";
 "Could not read group data: %@" = "Impossible de lire les données des groupes : %@";
 "Could not save group data: %@" = "Impossible d’enregistrer les données des groupes : %@";
+"The unreadable file was moved to %@." = "Le fichier illisible a été déplacé vers %@.";
 "Settings…" = "Réglages…";
 "Grant Accessibility Access…" = "Autoriser l’accès à l’accessibilité…";
 "Quit OpenContexts" = "Quitter OpenContexts";

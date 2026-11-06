@@ -20,6 +20,8 @@ public final class GroupStore: ObservableObject {
     public private(set) var persistenceError: String?
     public private(set) var persistenceErrorOperation: PersistenceErrorOperation?
     public private(set) var persistenceErrorDetail: String?
+    /// Where an unreadable groups file was moved so that a fresh one could be written.
+    public private(set) var persistenceBackupURL: URL?
     /// Saved windows whose live title or document changed since the last write; see `flushPendingChanges()`.
     public private(set) var hasPendingChanges = false
 
@@ -523,11 +525,23 @@ public final class GroupStore: ObservableObject {
             windowsByGroup = state.windowsByGroup
             for id in ids where windowsByGroup[id] == nil { windowsByGroup[id] = [] }
         } catch {
-            persistenceBlocked = true
             persistenceError = "无法读取分组数据：\(error.localizedDescription)"
             persistenceErrorOperation = .read
             persistenceErrorDetail = error.localizedDescription
-            return
+            moveUnreadableFileAside()
+        }
+    }
+
+    /// Keeps the unreadable file for the user and starts over; if it cannot be moved, nothing is ever written.
+    private func moveUnreadableFileAside() {
+        let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+        let backup = fileURL.deletingLastPathComponent()
+            .appendingPathComponent("groups.unreadable-\(stamp)-\(UUID().uuidString.prefix(8)).json")
+        do {
+            try FileManager.default.moveItem(at: fileURL, to: backup)
+            persistenceBackupURL = backup
+        } catch {
+            persistenceBlocked = true
         }
     }
 
@@ -544,9 +558,11 @@ public final class GroupStore: ObservableObject {
             })
             let data = try JSONEncoder().encode(State(groups: groups, windowsByGroup: persistedWindows))
             try data.write(to: fileURL, options: .atomic)
-            persistenceError = nil
-            persistenceErrorOperation = nil
-            persistenceErrorDetail = nil
+            if persistenceErrorOperation == .write {
+                persistenceError = nil
+                persistenceErrorOperation = nil
+                persistenceErrorDetail = nil
+            }
             hasPendingChanges = false
         } catch {
             persistenceError = "无法保存分组数据：\(error.localizedDescription)"

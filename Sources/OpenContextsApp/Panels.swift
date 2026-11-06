@@ -1045,7 +1045,7 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
 /// Activates OpenContexts for a modal prompt, then gives focus back to the app that had it.
 @MainActor
 func withAppActivated<T>(frontmost: () -> NSRunningApplication? = { NSWorkspace.shared.frontmostApplication },
-                         activateSelf: () -> Void = { NSApp.activate(ignoringOtherApps: true) },
+                         activateSelf: @MainActor () -> Void = { Activation.activateSelf() },
                          restore: (NSRunningApplication) -> Void = { _ = $0.activate(options: []) },
                          _ body: () -> T) -> T {
     let previous = frontmost()

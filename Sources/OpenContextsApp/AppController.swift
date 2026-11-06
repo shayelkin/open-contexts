@@ -353,7 +353,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
             window.center()
             settingsWindow = window
         }
-        NSApp.activate(ignoringOtherApps: true)
+        Activation.activateSelf()
         settingsWindow?.makeKeyAndOrderFront(nil)
         if let settingsWindow {
             windowService.registerLocalWindow(settingsWindow, id: Self.settingsWindowID)

@@ -198,7 +198,7 @@ final class WindowService: ObservableObject {
         if let window = localWindows[id]?.value {
             if window.isMiniaturized { window.deminiaturize(nil) }
             NSApp.unhide(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            Activation.activateSelf()
             window.makeKeyAndOrderFront(nil)
             publishWindows()
             return
@@ -227,7 +227,7 @@ final class WindowService: ObservableObject {
             guard !Task.isCancelled,
                   let application = NSRunningApplication(processIdentifier: window.info.processID) else { return }
             if application.isHidden { application.unhide() }
-            application.activate(options: [.activateIgnoringOtherApps])
+            Activation.activate(application)
 
             // Space transitions can restore their previous front app after the initial activation.
             if window.info.space?.isCurrent == false, let windowID = window.windowID {
@@ -254,7 +254,7 @@ final class WindowService: ObservableObject {
                     let frontPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
                     guard outcome.current else { continue }
                     if frontPID == window.info.processID && outcome.focused { continue }
-                    application.activate(options: [.activateIgnoringOtherApps])
+                    Activation.activate(application)
                     await self.raise(window, request: request)
                 }
             }

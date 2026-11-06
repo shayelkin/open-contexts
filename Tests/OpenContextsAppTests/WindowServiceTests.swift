@@ -428,6 +428,32 @@ final class WindowServiceAccessibilityTests: XCTestCase {
         assertFrontmost(target)
     }
 
+    func testActivationHelpersBringAppsForwardFromTheBackground() async throws {
+        let (service, target) = try await activationFixture(documentCount: 1)
+        defer { service.stop() }
+        NSApp.setActivationPolicy(.accessory)
+        let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 240, height: 120),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        defer { window.orderOut(nil) }
+        for _ in 0..<2 {
+            let app = try XCTUnwrap(NSRunningApplication(processIdentifier: target.info.processID))
+            Activation.activate(app)
+            for _ in 0..<40 where NSWorkspace.shared.frontmostApplication?.processIdentifier != app.processIdentifier {
+                try await Task.sleep(for: .milliseconds(25))
+            }
+            XCTAssertEqual(NSWorkspace.shared.frontmostApplication?.processIdentifier, app.processIdentifier,
+                           "another app was not activated")
+
+            Activation.activateSelf()
+            window.makeKeyAndOrderFront(nil)
+            for _ in 0..<40 where NSWorkspace.shared.frontmostApplication?.processIdentifier != getpid() {
+                try await Task.sleep(for: .milliseconds(25))
+            }
+            XCTAssertEqual(NSWorkspace.shared.frontmostApplication?.processIdentifier, getpid(),
+                           "OpenContexts did not activate itself from the background")
+        }
+    }
+
     func testActivationOverridesSpaceFocusRestoration() async throws {
         let (service, original) = try await activationFixture(documentCount: 1)
         defer { service.stop() }

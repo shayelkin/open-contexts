@@ -223,4 +223,42 @@ final class ShortcutControllerTests: XCTestCase {
         var idle = ShortcutState()
         XCTAssertNil(idle.appendToSearch("ж"), "search text was accepted while not switching")
     }
+
+    func testRecordedShortcutLabelsAndRejectedKeys() throws {
+        let named: [(UInt16, String)] = [(48, "Tab"), (49, "Space"), (36, "↩"), (51, "⌫"), (117, "⌦"),
+                                          (123, "←"), (124, "→"), (125, "↓"), (126, "↑"),
+                                          (122, "F1"), (120, "F2"), (111, "F12"), (90, "F20")]
+        for (keyCode, label) in named {
+            let shortcut = try XCTUnwrap(KeyboardShortcut(event: try keyEvent("x", keyCode: keyCode, modifiers: .command)),
+                                         label)
+            XCTAssertEqual(shortcut.keyLabel, label)
+            XCTAssertEqual(shortcut.display, "⌘" + label)
+        }
+        let letter = try XCTUnwrap(KeyboardShortcut(event: try keyEvent("é", keyCode: 14, modifiers: [.control, .option])))
+        XCTAssertEqual(letter.keyLabel, "É")
+        XCTAssertEqual(letter.display, "⌃⌥É")
+        XCTAssertEqual(letter.modifiers, [.maskControl, .maskAlternate])
+
+        XCTAssertNil(KeyboardShortcut(event: try keyEvent("a", keyCode: 0)), "a shortcut needs a modifier")
+        XCTAssertNil(KeyboardShortcut(event: try keyEvent("A", keyCode: 0, modifiers: [.command, .shift])),
+                     "Shift is reserved for switching backward")
+        XCTAssertNil(KeyboardShortcut(event: try keyEvent("\u{1B}", keyCode: 53, modifiers: .command)), "Escape cancels")
+        for modifierKey in UInt16(54)...63 {
+            XCTAssertNil(KeyboardShortcut(event: try keyEvent("", keyCode: modifierKey, modifiers: .command)))
+        }
+        XCTAssertNil(KeyboardShortcut(event: try keyEvent("", keyCode: 0, modifiers: .command)), "no label")
+        XCTAssertNil(KeyboardShortcut(event: try keyEvent(String(repeating: "x", count: 21), keyCode: 0,
+                                                          modifiers: .command)), "label too long")
+
+        for keyCode in UInt16(0)..<128 {
+            guard let shortcut = KeyboardShortcut(event: try keyEvent("k", keyCode: keyCode, modifiers: .option)) else {
+                XCTAssertTrue(keyCode == 53 || (54...63).contains(keyCode), "key \(keyCode) was rejected")
+                continue
+            }
+            XCTAssertTrue(shortcut.isValid)
+            XCTAssertTrue(shortcut.matches(keyCode: keyCode, flags: [.maskAlternate, .maskShift]),
+                          "Shift must not stop the reverse direction from matching")
+            XCTAssertFalse(shortcut.matches(keyCode: keyCode, flags: [.maskAlternate, .maskCommand]))
+        }
+    }
 }

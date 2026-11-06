@@ -217,8 +217,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         switch action {
         case .toggleSidebar:
             finishSwitcher(activating: nil)
-            guard let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) })
-                    ?? NSScreen.main,
+            let screens = NSScreen.screens
+            guard let screen = Self.screenIndex(containing: NSEvent.mouseLocation, frames: screens.map(\.frame))
+                    .map({ screens[$0] }) ?? NSScreen.main,
                   let panel = sidebars[Self.displayID(for: screen)] else { return }
             let expanded = !panel.isShortcutExpanded
             dismissSidebar()
@@ -382,6 +383,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func windowDidBecomeKey(_ notification: Notification) {
         guard let window = notification.object as? NSWindow, window === settingsWindow else { return }
         windowService.registerLocalWindow(window, id: Self.settingsWindowID)
+    }
+
+    /// `NSRect.contains` excludes the top edge, where the pointer can rest; NSMouseInRect matches pointer coordinates.
+    static func screenIndex(containing point: NSPoint, frames: [NSRect]) -> Int? {
+        frames.firstIndex { NSMouseInRect(point, $0, false) }
     }
 
     private static func displayID(for screen: NSScreen) -> CGDirectDisplayID {

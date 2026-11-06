@@ -977,4 +977,33 @@ final class SidebarPanelTests: XCTestCase {
         sidebar.updateHover(pointer: outside, now: 101 + SidebarHoverState.defaultCollapseDelay + 0.01)
         XCTAssertTrue(sidebar.smokeIsCollapsed)
     }
+
+    func testTitleOnlyChangesKeepRowViewsAndStructuralChangesRebuildThem() throws {
+        func render(_ windows: [WindowInfo]) {
+            sidebar.update(groups: groups, windowsByGroup: [GroupStore.ungroupedID: windows],
+                           alwaysVisible: true, fullscreen: false, language: .en)
+        }
+        func windowRows() -> [SidebarItemView] {
+            sidebar.sidebarRows.filter { if case .window = $0.style { return true }; return false }
+        }
+        let original = Array(windows.prefix(3))
+        render(original)
+        let rows = windowRows().map(ObjectIdentifier.init)
+        var retitled = original
+        retitled[1].title = "Renamed window"
+        retitled[2].space = WindowSpace(id: 9, index: 9, isCurrent: false)
+        render(retitled)
+        XCTAssertEqual(windowRows().map(ObjectIdentifier.init), rows, "a title change rebuilt the rows")
+        XCTAssertEqual(windowRows().map(\.titleLabel.stringValue), retitled.map(\.displayTitle))
+        XCTAssertEqual(windowRows()[1].accessibilityLabel(), "Renamed window")
+        let menu = try XCTUnwrap(windowRows()[1].menu)
+        sidebar.menuNeedsUpdate(menu)
+        XCTAssertTrue(menu.items.contains { $0.title == "Renamed window" }, "the menu used the old title")
+
+        render(Array(retitled.reversed()))
+        XCTAssertNotEqual(windowRows().map(ObjectIdentifier.init), rows.reversed(), "a reorder reused stale rows")
+        XCTAssertEqual(windowRows().map(\.titleLabel.stringValue), retitled.reversed().map(\.displayTitle))
+        render(Array(retitled.prefix(2)))
+        XCTAssertEqual(windowRows().count, 2)
+    }
 }

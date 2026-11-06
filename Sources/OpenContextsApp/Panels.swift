@@ -266,6 +266,20 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
         }
         if displayModeChanged { renderedItemDisplayMode = itemDisplayMode }
         if languageChanged { renderedLanguage = language }
+        if !positionChanged, !displayModeChanged, !languageChanged, !groupVisibilityChanged, groups == renderedGroups,
+           windowsByGroup != renderedWindows,
+           Self.rowStructure(windowsByGroup) == Self.rowStructure(renderedWindows) {
+            // Only titles changed (or fields the sidebar does not show): keep the rows, so hover, tooltips and
+            // icons survive and the views are not rebuilt on every scan.
+            renderedWindows = windowsByGroup
+            updateRowTitles()
+            if presentationChanged {
+                if position == .bottom { configureBottomItemWidths() }
+                layoutPanel()
+                layoutDocumentView()
+            }
+            return
+        }
         guard groups != renderedGroups || windowsByGroup != renderedWindows
                 || positionChanged || displayModeChanged || languageChanged || groupVisibilityChanged else {
             if presentationChanged {
@@ -369,6 +383,19 @@ final class SidebarPanel: NSPanel, NSMenuDelegate {
         }
         layoutPanel()
         layoutDocumentView()
+    }
+
+    /// What the rows are built from, other than titles.
+    private static func rowStructure(_ windowsByGroup: [String: [WindowInfo]]) -> [String: [String]] {
+        windowsByGroup.mapValues { $0.map { "\($0.id)\u{0}\($0.appID)\u{0}\($0.processID)" } }
+    }
+
+    private func updateRowTitles() {
+        for row in sidebarRows {
+            guard case let .window(id, groupID) = row.style,
+                  let window = renderedWindows[groupID]?.first(where: { $0.id == id }) else { continue }
+            row.setTitle(window.displayTitle)
+        }
     }
 
     func menuWillOpen(_ menu: NSMenu) {
@@ -1484,6 +1511,13 @@ final class SidebarItemView: NSView, NSDraggingSource {
 
     func setIcon(_ icon: NSImage) {
         iconView?.image = icon
+    }
+
+    func setTitle(_ title: String) {
+        guard titleLabel.stringValue != title else { return }
+        titleLabel.stringValue = title
+        setAccessibilityLabel(title)
+        if hovered { scheduleTooltip() }
     }
 
     func setContextMenu(_ menu: NSMenu) {

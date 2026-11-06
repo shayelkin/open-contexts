@@ -819,8 +819,12 @@ final class SidebarPanelTests: XCTestCase {
     }
 
     func testPinnedPreviewMatchesCommittedOrder() {
-        let pinStore = GroupStore(fileURL: FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString).appendingPathComponent("groups.json"))
+        let pinDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer {
+            GroupStore.waitForQueuedWrites()
+            try? FileManager.default.removeItem(at: pinDirectory)
+        }
+        let pinStore = GroupStore(fileURL: pinDirectory.appendingPathComponent("groups.json"))
         let pinWindows = Array(windows.prefix(4))
         pinStore.reconcile(pinWindows)
         pinStore.togglePin(id: windows[0].id)

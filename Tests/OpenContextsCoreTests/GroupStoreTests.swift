@@ -5,6 +5,17 @@ import XCTest
 
 @MainActor
 final class GroupStoreTests: XCTestCase {
+    private var temporaryDirectories: [URL] = []
+
+    override func tearDown() async throws {
+        GroupStore.waitForQueuedWrites()
+        for directory in temporaryDirectories {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: directory.path)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        temporaryDirectories = []
+    }
+
     func testFocusRecencyDoesNotReorderLiveOrSavedWindows() throws {
         let fileURL = temporaryFileURL()
         let store = GroupStore(fileURL: fileURL)
@@ -1131,9 +1142,9 @@ final class GroupStoreTests: XCTestCase {
     }
 
     private func temporaryFileURL() -> URL {
-        FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-            .appendingPathComponent("groups.json")
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        temporaryDirectories.append(directory)
+        return directory.appendingPathComponent("groups.json")
     }
 
     /// Reads the file once all queued writes, which happen off the main thread, have finished.

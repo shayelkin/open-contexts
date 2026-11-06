@@ -245,10 +245,8 @@ struct SettingsView: View {
         HStack(spacing: 0) {
             List(selection: $page) {
                 navigationItem(.general)
-                Section(L10n.text("Features", language: language)) {
-                    navigationItem(.sidebar)
-                    navigationItem(.shortcuts)
-                }
+                navigationItem(.sidebar)
+                navigationItem(.shortcuts)
             }
             .listStyle(.sidebar)
             .frame(width: 170)

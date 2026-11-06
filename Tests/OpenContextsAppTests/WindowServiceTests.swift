@@ -142,7 +142,7 @@ final class WindowServiceTests: XCTestCase {
                      pending: Set<CGWindowID> = []) -> (id: String?, deferred: Set<CGWindowID>) {
             var deferred: Set<CGWindowID> = []
             let id = WindowService.newWindowID(frame: frame, windowID: windowID, processID: 1,
-                                               listed: listed.map(\.element), previous: previous, usedIDs: usedIDs,
+                                               listed: Set(listed.map(\.element)), previous: previous, usedIDs: usedIDs,
                                                existingWindowIDs: existing, isTabbed: { tabbed }, pendingTabs: pending,
                                                deferredTabs: &deferred)
             return (id, deferred)

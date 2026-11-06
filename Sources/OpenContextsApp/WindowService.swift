@@ -391,6 +391,9 @@ final class WindowService: ObservableObject {
         var usedIDs: Set<String> = []
         let topology = WindowSpaces.query()
         let existingWindowIDs = Self.existingWindowIDs()
+        let previousByPID = Dictionary(grouping: previous, by: \.info.processID)
+        let previousByElement = Dictionary(grouping: previous, by: \.element)
+        var discoveredElements = Set<AXUIElement>()
         var discoveryState = discoveries.filter { pid, _ in applications.contains { $0.processID == pid } }
         for pid in Array(discoveryState.keys) {
             guard var state = discoveryState[pid] else { continue }
@@ -416,26 +419,30 @@ final class WindowService: ObservableObject {
             case .failure(.invalidUIElement):
                 appWindows = []
             case .noValue, .failure:
-                discovered.append(contentsOf: previous.filter { $0.info.processID == application.processID }.map {
+                let cachedWindows = previousByPID[application.processID] ?? []
+                discovered.append(contentsOf: cachedWindows.map {
                     var cached = $0
                     cached.info.space = topology?.space(for: cached.windowID) ?? cached.info.space
                     return cached
                 })
-                usedIDs.formUnion(previous.lazy.filter { $0.info.processID == application.processID }.map(\.id))
+                discoveredElements.formUnion(cachedWindows.map(\.element))
+                usedIDs.formUnion(cachedWindows.map(\.id))
                 continue
             }
+            var listed = Set<AXUIElement>()
+            appWindows = appWindows.filter { listed.insert($0).inserted }
             if application.processID == frontmostPID {
                 focusedElement = attribute(kAXFocusedWindowAttribute, of: appElement)
             }
 
             for key in [kAXFocusedWindowAttribute, kAXMainWindowAttribute] {
                 if let window: AXUIElement = attribute(key, of: appElement),
-                   !appWindows.contains(where: { CFEqual($0, window) }) { appWindows.append(window) }
+                   listed.insert(window).inserted { appWindows.append(window) }
             }
-            for window in previous where window.info.processID == application.processID {
+            for window in previousByPID[application.processID] ?? [] {
                 guard let id = window.windowID,
                       topology?.membership[id] != nil,
-                      !appWindows.contains(where: { CFEqual($0, window.element) }) else { continue }
+                      listed.insert(window.element).inserted else { continue }
                 appWindows.append(window.element)
             }
             if application.processID == discoveryPID, let topology {
@@ -449,15 +456,14 @@ final class WindowService: ObservableObject {
                 discoveryState[application.processID] = state
             }
             for element in discoveryState[application.processID]?.windows.values ?? Dictionary<CGWindowID, AXUIElement>().values {
-                if !appWindows.contains(where: { CFEqual($0, element) }) { appWindows.append(element) }
+                if listed.insert(element).inserted { appWindows.append(element) }
             }
 
             for element in appWindows {
                 AXUIElementSetMessagingTimeout(element, 0.2)
-                guard !discovered.contains(where: { CFEqual($0.element, element) }) else { continue }
+                guard !discoveredElements.contains(element) else { continue }
 
-                // ponytail: linear identity matching is simpler and fast for desktop-sized window lists.
-                let existing = previous.first { !usedIDs.contains($0.id) && CFEqual($0.element, element) }
+                let existing = previousByElement[element]?.first { !usedIDs.contains($0.id) }
                 let roleState: WindowCandidateState
                 let roleRead: AttributeRead<String> = readAttribute(kAXRoleAttribute, of: element)
                 switch roleRead {
@@ -564,11 +570,12 @@ final class WindowService: ObservableObject {
                 let windowID = existing?.windowID ?? WindowSpaces.windowID(of: element)
                 guard let id = existing?.id ?? newWindowID(
                     frame: windowFrame, windowID: windowID, processID: application.processID,
-                    listed: appWindows, previous: previous, usedIDs: usedIDs,
+                    listed: listed, previous: previous, usedIDs: usedIDs,
                     existingWindowIDs: existingWindowIDs, isTabbed: { isInTabGroup(element) },
                     pendingTabs: pendingTabs, deferredTabs: &deferredTabs
                 ) else { continue }
                 usedIDs.insert(id)
+                discoveredElements.insert(element)
                 discovered.append(TrackedWindow(
                     id: id,
                     element: element,
@@ -621,13 +628,13 @@ final class WindowService: ObservableObject {
     /// Switching tabs is not atomic: we can briefly, have both listed. To work around that, the new
     /// window is held back for one scan.
     nonisolated static func newWindowID(
-        frame: CGRect?, windowID: CGWindowID?, processID: pid_t, listed: [AXUIElement],
+        frame: CGRect?, windowID: CGWindowID?, processID: pid_t, listed: Set<AXUIElement>,
         previous: [TrackedWindow], usedIDs: Set<String>, existingWindowIDs: Set<CGWindowID>,
         isTabbed: () -> Bool, pendingTabs: Set<CGWindowID>, deferredTabs: inout Set<CGWindowID>
     ) -> String? {
         guard let frame, !frame.isEmpty else { return UUID().uuidString }
         let siblings = previous.filter { $0.info.processID == processID && $0.frame == frame }
-        let isListed = { (sibling: TrackedWindow) in listed.contains { CFEqual($0, sibling.element) } }
+        let isListed = { (sibling: TrackedWindow) in listed.contains(sibling.element) }
         let vanished = siblings.filter {
             !usedIDs.contains($0.id) && !isListed($0) && $0.windowID.map(existingWindowIDs.contains) == true
         }

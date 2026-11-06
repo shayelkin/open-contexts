@@ -86,9 +86,10 @@ public final class GroupStore: ObservableObject {
 
         savedIDByWindowID = savedIDByWindowID.filter { incoming[$0.key] != nil }
 
+        let locations = savedLocations()
         for window in uniqueWindows {
-            guard let savedID = savedIDByWindowID[window.id] else { continue }
-            updateSavedWindow(id: savedID, from: window)
+            guard let savedID = savedIDByWindowID[window.id], let location = locations[savedID] else { continue }
+            setMetadata(at: location, from: window)
         }
 
         let newWindows = activeWindowOrder.compactMap { incoming[$0] }.filter { savedIDByWindowID[$0.id] == nil }
@@ -96,7 +97,8 @@ public final class GroupStore: ObservableObject {
 
         for window in newWindows {
             if let savedID = savedIDByWindowID[window.id] {
-                updateSavedWindow(id: savedID, from: window)
+                // Bindings restored above point at existing records; appending to ungrouped keeps their indices.
+                if let location = locations[savedID] { setMetadata(at: location, from: window) }
             } else {
                 let saved = SavedWindow(window)
                 windowsByGroup[Self.ungroupedID, default: []].append(saved)
@@ -123,14 +125,32 @@ public final class GroupStore: ObservableObject {
     }
 
     private func refreshSavedMetadata(for windows: [WindowInfo]) {
+        let locations = savedLocations()
         for window in windows {
-            guard let savedID = savedIDByWindowID[window.id], let (groupID, index) = location(of: savedID),
-                  let saved = windowsByGroup[groupID]?[index],
+            guard let savedID = savedIDByWindowID[window.id], let location = locations[savedID],
+                  let saved = windowsByGroup[location.groupID]?[location.index],
                   saved.appID != window.appID || saved.title != window.title
                     || saved.documentURL != window.documentURL else { continue }
-            updateSavedWindow(id: savedID, from: window)
-            if groupID != Self.ungroupedID || saved.pinnedPosition != nil { hasPendingChanges = true }
+            setMetadata(at: location, from: window)
+            if location.groupID != Self.ungroupedID || saved.pinnedPosition != nil { hasPendingChanges = true }
         }
+    }
+
+    /// Where each saved record is, built once per batch instead of searching every group per window.
+    private func savedLocations() -> [String: (groupID: String, index: Int)] {
+        var locations: [String: (groupID: String, index: Int)] = [:]
+        for group in groups {
+            for (index, saved) in windowsByGroup[group.id, default: []].enumerated() where locations[saved.id] == nil {
+                locations[saved.id] = (group.id, index)
+            }
+        }
+        return locations
+    }
+
+    private func setMetadata(at location: (groupID: String, index: Int), from window: WindowInfo) {
+        windowsByGroup[location.groupID]?[location.index].appID = window.appID
+        windowsByGroup[location.groupID]?[location.index].title = window.title
+        windowsByGroup[location.groupID]?[location.index].documentURL = window.documentURL
     }
 
     private static func deduplicated(_ windows: [WindowInfo]) -> ([String: WindowInfo], [WindowInfo]) {
@@ -400,10 +420,8 @@ public final class GroupStore: ObservableObject {
     }
 
     private func updateSavedWindow(id: String, from window: WindowInfo) {
-        guard let (groupID, index) = location(of: id) else { return }
-        windowsByGroup[groupID]?[index].appID = window.appID
-        windowsByGroup[groupID]?[index].title = window.title
-        windowsByGroup[groupID]?[index].documentURL = window.documentURL
+        guard let location = location(of: id) else { return }
+        setMetadata(at: location, from: window)
     }
 
     private func changed(preferredSavedIDs: [String] = [],

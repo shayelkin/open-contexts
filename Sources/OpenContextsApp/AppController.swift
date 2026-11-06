@@ -16,6 +16,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var cancellables: Set<AnyCancellable> = []
     private var settingsWindow: NSWindow?
     private var statusItem: NSStatusItem?
+    private var statusMenuLanguage: AppLanguage?
     private var groupFlushTimer: Timer?
 
     private var switchingResults: [WindowSearch.Match] = []
@@ -323,6 +324,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func configureMenuBar() {
+        // Runs on every settings change, e.g. each tick of the width slider; the menu only depends on the language.
+        guard statusItem == nil || statusMenuLanguage != settings.language else { return }
+        statusMenuLanguage = settings.language
         let item = statusItem ?? NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         let image = NSImage(systemSymbolName: "rectangle.stack", accessibilityDescription: "OpenContexts")
         image?.size = NSSize(width: 18, height: 18)

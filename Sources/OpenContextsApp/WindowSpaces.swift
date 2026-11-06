@@ -93,14 +93,19 @@ enum WindowSpaces {
         return Snapshot(spaces: spaces, membership: membership, owners: owners)
     }
 
-    static func discoverWindows(pid: pid_t, targets: Set<CGWindowID>, state: inout DiscoveryState) -> [AXUIElement] {
+    /// Remote element IDs are per-process counters (a few dozen in practice). Past this bound the remaining
+    /// targets count as unresolvable until the targets change, instead of being probed on every scan forever.
+    static let maxElementID: UInt64 = 10_000
+
+    static func discoverWindows(pid: pid_t, targets: Set<CGWindowID>, state: inout DiscoveryState,
+                                maxElementID: UInt64 = WindowSpaces.maxElementID) -> [AXUIElement] {
         guard let api, !targets.isEmpty else { return [] }
         let deadline = ProcessInfo.processInfo.systemUptime + 0.08
         var remaining = targets.subtracting(state.windows.keys)
         if !remaining.isSubset(of: state.unresolved) { state.cursor = 0 }
         state.unresolved = remaining
         guard !remaining.isEmpty else { return targets.compactMap { state.windows[$0] } }
-        while ProcessInfo.processInfo.systemUptime < deadline {
+        while state.cursor < maxElementID, ProcessInfo.processInfo.systemUptime < deadline {
             // shortcut: remote AX tokens use an undocumented 20-byte ABI; revisit if macOS changes it.
             var token = Data()
             for value in [UInt32(bitPattern: pid), 0, 0x636f636f] {

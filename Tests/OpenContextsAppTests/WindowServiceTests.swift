@@ -353,6 +353,26 @@ final class WindowServiceAccessibilityTests: XCTestCase {
         XCTAssertLessThan(state.cursor, UInt64.max / 2)
     }
 
+    func testDiscoveryStopsProbingUnresolvableWindows() throws {
+        let dock = try XCTUnwrap(NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.dock").first)
+        let missing: CGWindowID = 0xFFFF_FFF0
+        var state = WindowSpaces.DiscoveryState()
+        for _ in 0..<100 where state.cursor < 200 {
+            XCTAssertTrue(WindowSpaces.discoverWindows(pid: dock.processIdentifier, targets: [missing], state: &state,
+                                                       maxElementID: 200).isEmpty)
+        }
+        XCTAssertEqual(state.cursor, 200)
+        let start = ProcessInfo.processInfo.systemUptime
+        _ = WindowSpaces.discoverWindows(pid: dock.processIdentifier, targets: [missing], state: &state,
+                                         maxElementID: 200)
+        XCTAssertEqual(state.cursor, 200, "an exhausted search kept probing")
+        XCTAssertLessThan(ProcessInfo.processInfo.systemUptime - start, 0.01)
+        _ = WindowSpaces.discoverWindows(pid: dock.processIdentifier, targets: [missing, missing - 1], state: &state,
+                                         maxElementID: 200)
+        XCTAssertLessThanOrEqual(state.cursor, 200)
+        XCTAssertEqual(state.unresolved, [missing, missing - 1], "a new target did not restart the search")
+    }
+
     func testActivationRaisesAndFocusesWindow() async throws {
         let (service, target) = try await activationFixture(documentCount: 1)
         defer { service.stop() }

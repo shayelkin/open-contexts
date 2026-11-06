@@ -335,6 +335,70 @@ final class WindowServiceTests: XCTestCase {
         let elements = try XCTUnwrap(WindowService.cast([element] as CFArray, to: [AXUIElement].self))
         XCTAssertTrue(elements.elementsEqual([element]) { CFEqual($0, $1) })
     }
+
+    func testTimerRefreshesUntilStopped() async throws {
+        var checks = 0
+        let service = WindowService(isTrusted: { checks += 1; return false })
+        service.start()
+        service.start()
+        XCTAssertEqual(checks, 1, "starting twice refreshed twice")
+        for _ in 0..<40 where checks < 3 { try await Task.sleep(for: .milliseconds(50)) }
+        XCTAssertGreaterThanOrEqual(checks, 3, "the timer did not keep refreshing")
+        service.stop()
+        try await Task.sleep(for: .milliseconds(100))
+        let stopped = checks
+        try await Task.sleep(for: .milliseconds(600))
+        XCTAssertEqual(checks, stopped, "a stopped service kept refreshing")
+    }
+
+    func testActivatingAnUnraisableWindowFinishesWithoutActivatingAnything() async throws {
+        let service = WindowService(isTrusted: { true })
+        defer { service.stop() }
+        service.apply(scanResult([tracked("ghost")]))
+        let frontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        service.activate("ghost")
+        let task = try XCTUnwrap(service.activationTask)
+        await task.value
+        XCTAssertFalse(task.isCancelled)
+        XCTAssertEqual(NSWorkspace.shared.frontmostApplication?.processIdentifier, frontmost)
+    }
+
+    func testLocalInputCancelsAPendingActivation() async throws {
+        let service = WindowService(isTrusted: { true })
+        defer { service.stop() }
+        service.apply(scanResult([tracked("ghost")]))
+        for type in [NSEvent.EventType.keyDown, .leftMouseDown] {
+            let gate = DispatchSemaphore(value: 0)
+            service.scanQueue.async { gate.wait() }
+            service.activate("ghost")
+            let task = try XCTUnwrap(service.activationTask)
+            try await Task.sleep(for: .milliseconds(50))
+            XCTAssertFalse(task.isCancelled)
+            let event = try XCTUnwrap(type == .keyDown
+                ? NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
+                                   context: nil, characters: "a", charactersIgnoringModifiers: "a", isARepeat: false,
+                                   keyCode: 0)
+                : NSEvent.mouseEvent(with: .leftMouseDown, location: .zero, modifierFlags: [], timestamp: 0,
+                                     windowNumber: 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+            NSApp.sendEvent(event)
+            XCTAssertTrue(task.isCancelled, "\(type) input did not cancel the activation")
+            gate.signal()
+            await task.value
+        }
+    }
+
+    func testTrackedWindowsWithoutACloseButtonAreNotClosed() async throws {
+        let service = WindowService(isTrusted: { true })
+        defer { service.stop() }
+        service.apply(scanResult([tracked("ghost")]))
+        let closable: Bool = await withCheckedContinuation { continuation in
+            service.canClose("ghost") { continuation.resume(returning: $0) }
+        }
+        XCTAssertFalse(closable)
+        service.close("ghost")
+        await withCheckedContinuation { continuation in service.scanQueue.async { continuation.resume() } }
+        XCTAssertEqual(service.windows.map(\.id), ["ghost"])
+    }
 }
 
 /// Tests that drive other apps through the Accessibility API. They run only when the process
@@ -465,6 +529,64 @@ final class WindowServiceAccessibilityTests: XCTestCase {
         service.activate(target.id)
         try await Task.sleep(for: .seconds(2))
         assertFrontmost(target)
+    }
+
+    func testActivationRestoresAMinimizedWindow() async throws {
+        let (service, target) = try await activationFixture(documentCount: 1)
+        defer { service.stop() }
+        func minimized() -> Bool? { WindowService.attribute(kAXMinimizedAttribute, of: target.element) }
+        XCTAssertEqual(AXUIElementSetAttributeValue(target.element, kAXMinimizedAttribute as CFString, kCFBooleanTrue),
+                       .success)
+        for _ in 0..<40 where minimized() != true { try await Task.sleep(for: .milliseconds(50)) }
+        XCTAssertEqual(minimized(), true, "the fixture window did not minimize")
+        service.activate(target.id)
+        await service.activationTask?.value
+        for _ in 0..<40 where minimized() != false { try await Task.sleep(for: .milliseconds(50)) }
+        XCTAssertEqual(minimized(), false, "activating a minimized window left it in the Dock")
+    }
+
+    func testClosingAnotherAppsWindowPressesItsCloseButton() async throws {
+        let (service, target) = try await activationFixture(documentCount: 2)
+        defer { service.stop() }
+        let windowID = try XCTUnwrap(target.windowID)
+        let closable: Bool = await withCheckedContinuation { continuation in
+            service.canClose(target.id) { continuation.resume(returning: $0) }
+        }
+        XCTAssertTrue(closable)
+        let app = AXUIElementCreateApplication(target.info.processID)
+        func isOpen() -> Bool {
+            let windows: [AXUIElement] = WindowService.attribute(kAXWindowsAttribute, of: app) ?? []
+            let onScreen = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
+            return windows.contains { CFEqual($0, target.element) }
+                || onScreen.contains { ($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value == windowID }
+        }
+        XCTAssertTrue(isOpen(), "the fixture window was not open")
+        service.close(target.id)
+        for _ in 0..<60 where isOpen() { try await Task.sleep(for: .milliseconds(50)) }
+        XCTAssertFalse(isOpen(), "the window stayed open")
+    }
+
+    func testSidebarHidesAnotherApp() async throws {
+        let (service, target) = try await activationFixture(documentCount: 1)
+        defer { service.stop() }
+        let app = try XCTUnwrap(NSRunningApplication(processIdentifier: target.info.processID))
+        let screen = try XCTUnwrap(NSScreen.main ?? NSScreen.screens.first)
+        let sidebar = SidebarPanel(screen: screen, onActivate: { _ in }, canCloseWindow: { $1(true) },
+                                   onCloseWindow: { _ in }, windowPinPosition: { _ in nil }, onTogglePin: { _ in },
+                                   onMoveWindow: { _, _, _, _ in }, onMoveGroup: { _, _ in }, onCreateGroup: { _ in },
+                                   onRenameGroup: { _, _ in }, onDeleteGroup: { _ in }, onResize: { _ in })
+        defer { sidebar.close() }
+        sidebar.smokeStopHoverPolling()
+        sidebar.update(groups: [WindowGroup(id: GroupStore.ungroupedID, name: "Ungrouped")],
+                       windowsByGroup: [GroupStore.ungroupedID: [target.info]], alwaysVisible: true,
+                       fullscreen: false, language: .en)
+        let row = try XCTUnwrap(sidebar.sidebarRows.first { if case .window = $0.style { return true }; return false })
+        let menu = try XCTUnwrap(row.menu)
+        sidebar.menuNeedsUpdate(menu)
+        let hide = try XCTUnwrap(menu.items.first { $0.title == "Hide App" })
+        menu.performActionForItem(at: menu.index(of: hide))
+        for _ in 0..<40 where !app.isHidden { try await Task.sleep(for: .milliseconds(50)) }
+        XCTAssertTrue(app.isHidden, "Hide App did not hide the app")
     }
 
     func testActivationHelpersBringAppsForwardFromTheBackground() async throws {

@@ -314,6 +314,57 @@ final class GroupStoreTests: XCTestCase {
                        ["Ungrouped", "Unsaved", "Saved"])
     }
 
+    func testMovingGroupsKeepsUngroupedFirstAndOnlyRealMovesSave() {
+        var random = SystemRandomNumberGenerator()
+        for _ in 0..<200 {
+            let store = GroupStore(fileURL: temporaryFileURL())
+            (0..<Int.random(in: 0...5, using: &random)).forEach { store.createGroup(name: "G\($0)") }
+            let ids = store.groups.map(\.id)
+            let candidates = ids + ["missing"]
+            for _ in 0..<20 {
+                let before = store.groups.map(\.id)
+                let revision = store.revision
+                let moved = candidates.randomElement(using: &random)!
+                let target = Bool.random(using: &random) ? nil : candidates.randomElement(using: &random)!
+                store.moveGroup(id: moved, before: target)
+                let after = store.groups.map(\.id)
+                XCTAssertEqual(after.first, GroupStore.ungroupedID)
+                XCTAssertEqual(Set(after), Set(ids))
+                XCTAssertEqual(store.revision != revision, after != before,
+                               "moving \(moved) before \(target ?? "end") changed revision without reordering, or vice versa")
+                guard after != before else { continue }
+                if let target { XCTAssertEqual(after.firstIndex(of: moved).map { $0 + 1 }, after.firstIndex(of: target)) }
+                else { XCTAssertEqual(after.last, moved) }
+            }
+        }
+    }
+
+    func testCreatingAndRenamingGroupsTrimNamesAndRejectBlankOrUngroupedChanges() throws {
+        let store = GroupStore(fileURL: temporaryFileURL())
+        var revision = store.revision
+        for blank in ["", "   ", "\n\t"] {
+            store.createGroup(name: blank)
+            XCTAssertEqual(store.groups.count, 1, "a blank group was created")
+        }
+        XCTAssertEqual(store.revision, revision)
+        store.createGroup(name: "  Work  ")
+        store.createGroup(name: "Work")
+        XCTAssertEqual(store.groups.map(\.name), ["Ungrouped", "Work", "Work"])
+        XCTAssertEqual(Set(store.groups.map(\.id)).count, 3, "duplicate names must still get distinct groups")
+
+        let work = try XCTUnwrap(store.groups.last?.id)
+        revision = store.revision
+        store.renameGroup(id: work, name: " Work ")
+        store.renameGroup(id: work, name: "  ")
+        store.renameGroup(id: GroupStore.ungroupedID, name: "Inbox")
+        store.renameGroup(id: "missing", name: "Other")
+        XCTAssertEqual(store.revision, revision, "a rejected or unchanged rename saved")
+        XCTAssertEqual(store.groups.map(\.name), ["Ungrouped", "Work", "Work"])
+        store.renameGroup(id: work, name: " Focus ")
+        XCTAssertEqual(store.groups.last?.name, "Focus")
+        XCTAssertEqual(store.revision, revision + 1)
+    }
+
     func testQueuedWritesLandInOrderAndAFailedWriteIsRetriedByTheNextFlush() throws {
         let fileURL = temporaryFileURL()
         let store = GroupStore(fileURL: fileURL)

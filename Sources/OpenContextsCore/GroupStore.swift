@@ -334,11 +334,15 @@ public final class GroupStore: ObservableObject {
     public func moveGroup(id: String, before groupID: String?) {
         guard id != Self.ungroupedID,
               let source = groups.firstIndex(where: { $0.id == id }),
-              groupID != Self.ungroupedID, groupID != id else { return }
-        let group = groups.remove(at: source)
-        let destination = groupID.flatMap { target in groups.firstIndex(where: { $0.id == target }) }
-            ?? groups.endIndex
-        groups.insert(group, at: destination)
+              groupID != Self.ungroupedID, groupID != id,
+              groupID.map({ target in groups.contains { $0.id == target } }) ?? true else { return }
+        var reordered = groups
+        let group = reordered.remove(at: source)
+        let destination = groupID.flatMap { target in reordered.firstIndex(where: { $0.id == target }) }
+            ?? reordered.endIndex
+        reordered.insert(group, at: destination)
+        guard reordered != groups else { return }
+        groups = reordered
         changed()
     }
 

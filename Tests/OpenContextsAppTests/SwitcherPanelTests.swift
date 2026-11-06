@@ -25,8 +25,9 @@ final class SwitcherPanelTests: XCTestCase {
                                        file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertEqual(frame.height, 140, "search results did not size the panel", file: file, line: line)
         XCTAssertEqual(frame.width, original.width, file: file, line: line)
-        XCTAssertEqual(frame.midX, original.midX, file: file, line: line)
-        XCTAssertEqual(frame.midY, original.midY, file: file, line: line)
+        let pixel = 1 / switcher.backingScaleFactor
+        XCTAssertEqual(frame.midX, original.midX, accuracy: pixel, file: file, line: line)
+        XCTAssertEqual(frame.midY, original.midY, accuracy: pixel, file: file, line: line)
     }
 
     private func move(to index: Int, offset: CGFloat = 0) {

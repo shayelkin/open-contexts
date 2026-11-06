@@ -3,6 +3,7 @@ import Foundation
 import XCTest
 @testable import OpenContextsCore
 
+@MainActor
 final class GroupStoreTests: XCTestCase {
     func testFocusRecencyDoesNotReorderLiveOrSavedWindows() throws {
         let fileURL = temporaryFileURL()

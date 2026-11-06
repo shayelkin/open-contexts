@@ -11,6 +11,7 @@ public struct WindowGroup: Identifiable, Codable, Equatable {
     }
 }
 
+@MainActor
 public final class GroupStore: ObservableObject {
     public static let ungroupedID = "ungrouped"
     public enum PersistenceErrorOperation { case read, write }
@@ -50,7 +51,7 @@ public final class GroupStore: ObservableObject {
     }
 
     private let fileURL: URL
-    private static let writeQueue = DispatchQueue(label: "OpenContexts.GroupStore.write", qos: .utility)
+    nonisolated private static let writeQueue = DispatchQueue(label: "OpenContexts.GroupStore.write", qos: .utility)
     private let latestWrite = LatestWrite()
     private var writeGeneration = 0
     private var appliedWriteGeneration = 0
@@ -197,14 +198,14 @@ public final class GroupStore: ObservableObject {
 
     /// The free slot in `0..<count` closest after `requested` (or before it when none is free after), or `nil`
     /// when every slot is occupied.
-    public static func availablePinnedPosition(_ requested: Int, occupied: Set<Int>, count: Int) -> Int? {
+    nonisolated public static func availablePinnedPosition(_ requested: Int, occupied: Set<Int>, count: Int) -> Int? {
         guard count > 0 else { return nil }
         let start = min(max(requested, 0), count - 1)
         if let after = (start..<count).first(where: { !occupied.contains($0) }) { return after }
         return (0..<start).reversed().first(where: { !occupied.contains($0) })
     }
 
-    public static func arrangedWindowIDs(_ ids: [String], pinned: [(String, Int)]) -> [String] {
+    nonisolated public static func arrangedWindowIDs(_ ids: [String], pinned: [(String, Int)]) -> [String] {
         var seen = Set<String>()
         let ids = ids.filter { seen.insert($0).inserted }
         var slots = [String?](repeating: nil, count: ids.count)
@@ -611,12 +612,12 @@ public final class GroupStore: ObservableObject {
                 failure = error.localizedDescription
             }
             outcome.store(WriteOutcome(generation: generation, error: failure))
-            DispatchQueue.main.async { self?.applyLatestWrite() }
+            Task { @MainActor in self?.applyLatestWrite() }
         }
     }
 
     /// Blocks until every store's queued writes have finished.
-    public static func waitForQueuedWrites() {
+    nonisolated public static func waitForQueuedWrites() {
         writeQueue.sync {}
     }
 

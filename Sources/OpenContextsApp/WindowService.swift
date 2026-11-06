@@ -319,11 +319,12 @@ final class WindowService: ObservableObject {
             return
         }
         guard hasAccessibility, let window = tracked.first(where: { $0.id == id }) else { return }
+        let logger = logger
         scanQueue.async { [weak self] in
             guard let button = Self.closeButton(of: window.element) else { return }
             let result = AXUIElementPerformAction(button, kAXPressAction as CFString)
             if result != .success {
-                self?.logger.error("Failed to close window \(id, privacy: .public): AX error \(result.rawValue)")
+                logger.error("Failed to close window \(id, privacy: .public): AX error \(result.rawValue)")
             }
             Task { @MainActor [weak self] in self?.refresh() }
         }

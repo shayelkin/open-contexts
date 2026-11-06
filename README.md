@@ -47,7 +47,7 @@ The window switcher displays windows in most recently used order. You can contin
 | Active window highlight | Keeps the current window highlighted in the app bar with the same blue background and white text as the window switcher |
 | Window activation | Attempts to restore minimized or hidden windows when activated |
 | Window information | Displays app icons, window titles, and notification badges readable from the system Dock |
-| Native macOS app | Built with Swift, AppKit, and SwiftUI; app updates use Sparkle |
+| Native macOS app | Built with Swift, AppKit, and SwiftUI |
 
 ### Saved window groups
 
@@ -77,8 +77,6 @@ Requirements: macOS 13 or later. macOS 13 has not yet been verified on physical 
 Accessibility permission lets Open Contexts discover and switch windows and handle keyboard shortcuts. Without permission, or while the app is closed, Open Contexts does not take over `⌘Tab`. If permission stops working after an update, remove Open Contexts from the Accessibility list, then add it back and grant access again.
 
 You can open “Settings…” or select “Quit OpenContexts” from the menu bar icon at any time.
-
-After installing a version with update support, you can select “Check for Updates…” from the menu bar and install new versions in the app. The published v0.2.1 has no updater: install the first Sparkle-enabled version, v0.3.0, manually. Subsequent updates can be installed in the app.
 
 ### If macOS says the app cannot be opened
 
@@ -140,13 +138,13 @@ Issues and pull requests are welcome.
 <details>
 <summary>Releases and signing</summary>
 
-Pushing a `v*` tag triggers GitHub Actions to build a Universal DMG and publish the DMG, `SHA256SUMS.txt`, `appcast.xml` with an EdDSA signature for the DMG, and a matching Markdown release notes file to GitHub Releases. The notes are extracted from the current version in `CHANGELOG.md` and shown in Sparkle's update window. The app checks for updates at the fixed URL `https://github.com/zshnb/open-contexts/releases/latest/download/appcast.xml`. The pipeline validates the release notes link and uploads every artifact before making the release public.
+Pushing a `v*` tag triggers GitHub Actions to build a Universal DMG and publish the DMG, `SHA256SUMS.txt`, and a matching Markdown release notes file to GitHub Releases. The notes are extracted from the current version in `CHANGELOG.md`. The pipeline uploads every artifact before making the release public.
 
 Developer ID mode enables signing and Apple notarization by default. It requires `APPLE_CERTIFICATE_P12_BASE64`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_TEAM_ID`, and `APPLE_APP_SPECIFIC_PASSWORD`. Fixed self-signed mode signs every version with the same certificate named `OpenContexts Release Signing`: Base64-encode the P12 file containing its private key into the GitHub Actions secret `OPENCONTEXTS_CERTIFICATE_P12_BASE64`, put its export password in `OPENCONTEXTS_CERTIFICATE_PASSWORD`, and set the repository variable `RELEASE_SIGNING_MODE` to `self-signed`. To build locally, run `SIGNING_MODE=self-signed CODE_SIGN_IDENTITY=<certificate SHA-1> ./scripts/build-app.sh release`. Back up this certificate and its private key securely; replacing it changes the app's code identity and may require Accessibility permission again.
 
-All three modes require the GitHub Actions secret `SPARKLE_ED_PRIVATE_KEY`, whose private key must match the public key in `config/sparkle-public-key.txt`. The current release validation supports only a Base64-encoded 32-byte seed exported in the new Sparkle `generate_keys` format, not the older 96-byte key. The pipeline stops if required credentials are missing; it does not silently downgrade signing. Increment `VERSION` before a release.
+The pipeline stops if required credentials are missing; it does not silently downgrade signing. Increment `VERSION` before a release.
 
-Without Apple distribution credentials, you can set the repository variable `RELEASE_SIGNING_MODE` to `self-signed`. This mode still produces EdDSA-signed updates, but it is not notarized by Apple and Gatekeeper may prevent it from opening. Switching from an older ad-hoc signed version to the fixed certificate may require granting Accessibility permission once again. Later versions can retain a stable code identity as long as they use the same certificate, app identifier, and installation path. Apple does not recommend publicly distributing apps with self-signed certificates. Set the variable to `adhoc` for internal testing, though each update may require permission again. Remove the variable or set it to `developer-id` to restore the Developer ID release process.
+Without Apple distribution credentials, you can set the repository variable `RELEASE_SIGNING_MODE` to `self-signed`. This mode is not notarized by Apple and Gatekeeper may prevent it from opening. Switching from an older ad-hoc signed version to the fixed certificate may require granting Accessibility permission once again. Later versions can retain a stable code identity as long as they use the same certificate, app identifier, and installation path. Apple does not recommend publicly distributing apps with self-signed certificates. Set the variable to `adhoc` for internal testing, though each update may require permission again. Remove the variable or set it to `developer-id` to restore the Developer ID release process.
 
 </details>
 

@@ -1,7 +1,6 @@
 import AppKit
 import Combine
 import OpenContextsCore
-import Sparkle
 import SwiftUI
 
 @MainActor
@@ -11,9 +10,6 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let groupStore = GroupStore()
     private let shortcuts = ShortcutController()
     private let settings = AppSettings()
-    private let updaterController = SPUStandardUpdaterController(
-        startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil
-    )
 
     private var sidebars: [CGDirectDisplayID: SidebarPanel] = [:]
     private var switchers: [CGDirectDisplayID: SwitcherPanel] = [:]
@@ -314,8 +310,6 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         item.button?.setAccessibilityLabel("OpenContexts")
         let menu = NSMenu()
         menu.addItem(withTitle: L10n.text("Settings…", language: settings.language), action: #selector(showSettings), keyEquivalent: ",").target = self
-        menu.addItem(withTitle: L10n.text("Check for Updates…", language: settings.language), action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)), keyEquivalent: "")
-            .target = updaterController
         menu.addItem(withTitle: L10n.text("Grant Accessibility Access…", language: settings.language), action: #selector(requestAccessibility), keyEquivalent: "")
             .target = self
         menu.addItem(.separator())

@@ -47,7 +47,7 @@ Open Contexts 是**免费开源的 macOS 窗口切换器**，支持按应用名�
 | 当前窗口高亮 | 应用栏持续高亮当前激活窗口，沿用窗口切换器的蓝底白字样式 |
 | 窗口激活 | 激活最小化或隐藏的窗口时尝试恢复显示 |
 | 窗口信息 | 显示应用图标、窗口标题与系统可读取的 Dock 通知角标 |
-| macOS 原生应用 | 使用 Swift、AppKit 和 SwiftUI 构建；应用更新使用 Sparkle |
+| macOS 原生应用 | 使用 Swift、AppKit 和 SwiftUI 构建 |
 
 ### 保存自定义窗口分组
 
@@ -77,8 +77,6 @@ Open Contexts 目前不支持触控板切换手势。全屏行为仍需在更多
 辅助功能权限用于发现和切换窗口，以及接管快捷键。未授权或应用退出时，Open Contexts 不会接管 `⌘Tab`。应用更新后如果权限失效，请在辅助功能列表中移除 Open Contexts，再重新添加并授权。
 
 以后可随时点击菜单栏图标打开“设置…”，或选择“退出 OpenContexts”结束运行。
-
-安装了带更新功能的版本后，可从菜单栏选择“检查更新…”并在应用内安装新版本。已发布的 v0.2.1 不含更新器，需手动安装首个带 Sparkle 的 v0.3.0，此后才可在应用内升级。
 
 ### macOS 提示应用无法打开
 
@@ -142,13 +140,13 @@ open dist/OpenContexts.app
 <details>
 <summary>发布与签名</summary>
 
-推送 `v*` 标签后，GitHub Actions 会构建 Universal DMG，并将 DMG、`SHA256SUMS.txt`、含有 DMG EdDSA 签名的 `appcast.xml` 和与 DMG 同名的 Markdown 更新说明发布到 GitHub Releases。说明从 `CHANGELOG.md` 的当前版本提取，检测到新版本时显示在 Sparkle 更新窗口中。应用通过固定地址 `https://github.com/zshnb/open-contexts/releases/latest/download/appcast.xml` 检查更新。流水线校验说明链接、上传全部产物后，再公开发布。
+推送 `v*` 标签后，GitHub Actions 会构建 Universal DMG，并将 DMG、`SHA256SUMS.txt` 和与 DMG 同名的 Markdown 更新说明发布到 GitHub Releases。说明从 `CHANGELOG.md` 的当前版本提取。流水线上传全部产物后，再公开发布。
 
 Developer ID 模式默认启用签名与 Apple 公证，需要配置 `APPLE_CERTIFICATE_P12_BASE64`、`APPLE_CERTIFICATE_PASSWORD`、`APPLE_ID`、`APPLE_TEAM_ID` 和 `APPLE_APP_SPECIFIC_PASSWORD`。固定自签名模式使用同一份名为 `OpenContexts Release Signing` 的证书签署所有版本：将包含私钥的 P12 文件以 Base64 编码存入 GitHub Actions Secret `OPENCONTEXTS_CERTIFICATE_P12_BASE64`，将导出密码存入 `OPENCONTEXTS_CERTIFICATE_PASSWORD`，并将仓库变量 `RELEASE_SIGNING_MODE` 设为 `self-signed`。本地可用 `SIGNING_MODE=self-signed CODE_SIGN_IDENTITY=<证书 SHA-1> ./scripts/build-app.sh release` 构建。请安全备份这份证书与私钥；更换证书会改变应用代码身份，可能再次要求辅助功能授权。
 
-三种模式都必须配置 GitHub Actions Secret `SPARKLE_ED_PRIVATE_KEY`，其私钥须与 `config/sparkle-public-key.txt` 中的公钥配对。当前发布校验只支持 Sparkle `generate_keys` 新格式导出的 Base64 编码 32 字节 seed，不支持旧版 96 字节密钥。缺少所需凭据时流水线会停止，不会自动降级签名。发布前需递增 `VERSION`。
+缺少所需凭据时流水线会停止，不会自动降级签名。发布前需递增 `VERSION`。
 
-没有 Apple 发布凭据时，可将仓库变量 `RELEASE_SIGNING_MODE` 设为 `self-signed`。此模式仍生成 EdDSA 签名更新，但未经 Apple 公证，Gatekeeper 可能阻止打开；从旧版 ad-hoc 签名切换到固定证书时，辅助功能权限可能需要重新授予一次。后续版本只要继续使用同一证书、应用标识和安装路径，代码身份即可保持稳定。Apple 不建议用自签名证书公开分发应用。设为 `adhoc` 可用于内部测试，但每次更新都可能重新授权；删除变量或设为 `developer-id` 可恢复 Developer ID 发布流程。
+没有 Apple 发布凭据时，可将仓库变量 `RELEASE_SIGNING_MODE` 设为 `self-signed`。此模式未经 Apple 公证，Gatekeeper 可能阻止打开；从旧版 ad-hoc 签名切换到固定证书时，辅助功能权限可能需要重新授予一次。后续版本只要继续使用同一证书、应用标识和安装路径，代码身份即可保持稳定。Apple 不建议用自签名证书公开分发应用。设为 `adhoc` 可用于内部测试，但每次更新都可能重新授权；删除变量或设为 `developer-id` 可恢复 Developer ID 发布流程。
 
 </details>
 

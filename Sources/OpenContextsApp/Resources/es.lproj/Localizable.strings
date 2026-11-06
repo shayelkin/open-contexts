@@ -31,7 +31,6 @@
 "Could not read group data: %@" = "No se pudieron leer los datos de grupos: %@";
 "Could not save group data: %@" = "No se pudieron guardar los datos de grupos: %@";
 "Settings…" = "Ajustes…";
-"Check for Updates…" = "Buscar actualizaciones…";
 "Grant Accessibility Access…" = "Conceder acceso de accesibilidad…";
 "Quit OpenContexts" = "Salir de OpenContexts";
 "OpenContexts Settings" = "Ajustes de OpenContexts";

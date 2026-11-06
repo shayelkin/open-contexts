@@ -6,19 +6,14 @@ let package = Package(
     defaultLocalization: "en",
     platforms: [.macOS(.v13)],
     products: [.executable(name: "OpenContexts", targets: ["OpenContexts"])],
-    dependencies: [.package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0")],
     targets: [
         .target(name: "OpenContextsCore"),
         .target(
             name: "OpenContextsApp",
-            dependencies: ["OpenContextsCore", .product(name: "Sparkle", package: "Sparkle")],
+            dependencies: ["OpenContextsCore"],
             resources: [.process("Resources")]
         ),
-        .executableTarget(
-            name: "OpenContexts",
-            dependencies: ["OpenContextsApp"],
-            linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
-        ),
+        .executableTarget(name: "OpenContexts", dependencies: ["OpenContextsApp"]),
         .testTarget(name: "OpenContextsCoreTests", dependencies: ["OpenContextsCore"]),
         .testTarget(name: "OpenContextsAppTests", dependencies: ["OpenContextsApp"])
     ]

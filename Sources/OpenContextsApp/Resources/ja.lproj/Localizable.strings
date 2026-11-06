@@ -31,7 +31,6 @@
 "Could not read group data: %@" = "グループデータを読み込めません：%@";
 "Could not save group data: %@" = "グループデータを保存できません：%@";
 "Settings…" = "設定…";
-"Check for Updates…" = "アップデートを確認…";
 "Grant Accessibility Access…" = "アクセシビリティを許可…";
 "Quit OpenContexts" = "OpenContexts を終了";
 "OpenContexts Settings" = "OpenContexts の設定";

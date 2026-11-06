@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Removed
+
+- Remove the Sparkle updater and the “Check for Updates…” menu item; install new versions manually.
+
+### 移除
+
+- 移除 Sparkle 更新器和“检查更新…”菜单项；新版本需手动安装。
+
 ## [0.5.1] - 2026-10-30
 
 ### Added

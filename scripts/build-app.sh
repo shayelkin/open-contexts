@@ -38,11 +38,6 @@ if [[ ! -f assets/AppIcon.icns ]]; then
     echo "App icon is missing: assets/AppIcon.icns" >&2
     exit 1
 fi
-sparkle_public_key="${SPARKLE_PUBLIC_ED_KEY:-$(<config/sparkle-public-key.txt)}"
-if [[ ! "$sparkle_public_key" =~ ^[A-Za-z0-9+/]{43}=$ ]]; then
-    echo "SPARKLE_PUBLIC_ED_KEY must be a base64-encoded Ed25519 public key" >&2
-    exit 2
-fi
 
 if [[ "$signing_mode" == adhoc ]]; then
     if [[ -n "$requested_identity" && "$requested_identity" != "-" ]]; then
@@ -161,14 +156,6 @@ fi
 ditto "$resource_source_dir/OpenContexts_OpenContextsApp.bundle" \
     "$app/Contents/Resources/OpenContexts_OpenContextsApp.bundle"
 
-sparkle_framework="$PWD/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
-if [[ ! -d "$sparkle_framework" ]]; then
-    echo "Sparkle framework missing from SwiftPM artifacts: $sparkle_framework" >&2
-    exit 1
-fi
-mkdir -p "$app/Contents/Frameworks"
-ditto "$sparkle_framework" "$app/Contents/Frameworks/Sparkle.framework"
-
 cp assets/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -182,25 +169,11 @@ cat > "$app/Contents/Info.plist" <<PLIST
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>$version</string>
     <key>CFBundleVersion</key><string>$build_number</string>
-    <key>SUFeedURL</key><string>https://github.com/zshnb/open-contexts/releases/latest/download/appcast.xml</string>
-    <key>SUPublicEDKey</key><string>$sparkle_public_key</string>
-    <key>SUEnableAutomaticChecks</key><false/>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>LSUIElement</key><true/>
     <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 PLIST
-
-sparkle_version="$app/Contents/Frameworks/Sparkle.framework/Versions/B"
-sign_args=(--force --sign "$signing_identity")
-if [[ "$signing_mode" == developer-id ]]; then
-    sign_args+=(--options runtime --timestamp)
-fi
-codesign "${sign_args[@]}" "$sparkle_version/XPCServices/Installer.xpc"
-codesign "${sign_args[@]}" --preserve-metadata=entitlements "$sparkle_version/XPCServices/Downloader.xpc"
-codesign "${sign_args[@]}" "$sparkle_version/Autoupdate"
-codesign "${sign_args[@]}" "$sparkle_version/Updater.app"
-codesign "${sign_args[@]}" "$app/Contents/Frameworks/Sparkle.framework"
 
 if [[ "$signing_mode" == developer-id ]]; then
     codesign --force --sign "$signing_identity" --options runtime --timestamp "$app"

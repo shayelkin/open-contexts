@@ -138,36 +138,31 @@ public final class GroupStore: ObservableObject {
         return windowsByGroup[groupID]?[index].pinnedPosition
     }
 
-    public static func availablePinnedPosition(_ requested: Int, occupied: Set<Int>, count: Int) -> Int {
-        guard count > 0 else { return 0 }
-        var position = min(requested, count - 1)
-        while occupied.contains(position) && position < count - 1 { position += 1 }
-        while occupied.contains(position) && position > 0 { position -= 1 }
-        if occupied.contains(position) {
-            position = count
-            while occupied.contains(position) { position += 1 }
-        }
-        return position
+    /// The free slot in `0..<count` closest after `requested` (or before it when none is free after), or `nil`
+    /// when every slot is occupied.
+    public static func availablePinnedPosition(_ requested: Int, occupied: Set<Int>, count: Int) -> Int? {
+        guard count > 0 else { return nil }
+        let start = min(max(requested, 0), count - 1)
+        if let after = (start..<count).first(where: { !occupied.contains($0) }) { return after }
+        return (0..<start).reversed().first(where: { !occupied.contains($0) })
     }
 
     public static func arrangedWindowIDs(_ ids: [String], pinned: [(String, Int)]) -> [String] {
-        guard !ids.isEmpty else { return [] }
+        var seen = Set<String>()
+        let ids = ids.filter { seen.insert($0).inserted }
         var slots = [String?](repeating: nil, count: ids.count)
+        var occupied = Set<Int>()
         var pinnedIDs = Set<String>()
-        for (id, requested) in pinned where ids.contains(id) {
-            let position = availablePinnedPosition(requested,
-                                                   occupied: Set(slots.indices.filter { slots[$0] != nil }),
-                                                   count: slots.count)
+        for (id, requested) in pinned where seen.contains(id) && !pinnedIDs.contains(id) {
+            guard let position = availablePinnedPosition(requested, occupied: occupied, count: slots.count) else {
+                continue
+            }
             slots[position] = id
+            occupied.insert(position)
             pinnedIDs.insert(id)
         }
-        let unpinned = ids.filter { !pinnedIDs.contains($0) }
-        var next = 0
-        for index in slots.indices where slots[index] == nil {
-            slots[index] = unpinned[next]
-            next += 1
-        }
-        return slots.compactMap { $0 }
+        var unpinned = ids.filter { !pinnedIDs.contains($0) }.makeIterator()
+        return slots.compactMap { $0 ?? unpinned.next() }
     }
 
     public func createGroup(name: String) {

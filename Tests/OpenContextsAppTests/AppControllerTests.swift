@@ -327,7 +327,7 @@ final class AppControllerTests: XCTestCase {
 
     func testSidebarsFollowSettings() async throws {
         await launch()
-        let other = WindowSpace(id: 2, index: 2, isCurrent: false, desktopNumber: 2)
+        let other = WindowSpace(id: 2, index: 2, isCurrent: false, kind: .desktop(number: 2))
         let windows = [window("here"), window("there", space: other)]
         await scan(windows)
         sidebars.forEach { XCTAssertEqual(rowOrder($0), ["w:here"]) }
@@ -507,7 +507,7 @@ final class AppControllerTests: XCTestCase {
         frontmostPID = 99
         XCTAssertFalse(canBegin(true))
 
-        let other = WindowSpace(id: 2, index: 2, isCurrent: false)
+        let other = WindowSpace(id: 2, index: 2, isCurrent: false, kind: .desktop(number: 2))
         await scan([window("far", pid: 42, space: other)])
         frontmostPID = 42
         XCTAssertFalse(canBegin(false), "a window on another desktop counted")
@@ -718,7 +718,7 @@ final class AppControllerTests: XCTestCase {
         // Sidebar scope already covers all desktops, so the switcher setting starts no real scan.
         defaults.set(true, forKey: "showSidebarWindowsFromAllDesktops")
         await launch()
-        let other = WindowSpace(id: 2, index: 2, isCurrent: false, desktopNumber: 2)
+        let other = WindowSpace(id: 2, index: 2, isCurrent: false, kind: .desktop(number: 2))
         await scan([window("here"), window("there", space: other)])
         await act(.begin(currentAppOnly: false, reverse: false))
         XCTAssertEqual(resultIDs, ["here"])

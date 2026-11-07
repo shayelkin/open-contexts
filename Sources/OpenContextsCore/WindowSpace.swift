@@ -4,16 +4,19 @@ public struct WindowSpace: Equatable, Sendable {
     public let id: UInt64
     public let index: Int
     public let isCurrent: Bool
-    public let isFullscreen: Bool
-    /// The number Mission Control shows for a desktop on its display; nil for full-screen spaces.
-    public let desktopNumber: Int?
+    public let kind: Kind
 
-    public init(id: UInt64, index: Int, isCurrent: Bool, isFullscreen: Bool = false, desktopNumber: Int? = nil) {
+    public enum Kind: Equatable, Sendable {
+        /// A desktop, with the number Mission Control shows for it on its display.
+        case desktop(number: Int)
+        case fullscreen
+    }
+
+    public init(id: UInt64, index: Int, isCurrent: Bool, kind: Kind) {
         self.id = id
         self.index = index
         self.isCurrent = isCurrent
-        self.isFullscreen = isFullscreen
-        self.desktopNumber = desktopNumber
+        self.kind = kind
     }
 }
 

@@ -7,8 +7,8 @@ final class WindowSpaceTests: XCTestCase {
     }
 
     func testCurrentDesktopIsFirstAndKeepsRecentOrder() {
-        let current = WindowSpace(id: 30, index: 3, isCurrent: true)
-        let other = WindowSpace(id: 10, index: 1, isCurrent: false)
+        let current = WindowSpace(id: 30, index: 3, isCurrent: true, kind: .desktop(number: 3))
+        let other = WindowSpace(id: 10, index: 1, isCurrent: false, kind: .desktop(number: 1))
         let windows = [window("old-other", app: "Zulu", space: other),
                        window("recent", app: "Zulu", space: current),
                        window("older", app: "Alpha", space: current),
@@ -20,8 +20,8 @@ final class WindowSpaceTests: XCTestCase {
     }
 
     func testOtherDesktopsIgnoreRecentOrderAndFollowDesktopIndex() {
-        let first = WindowSpace(id: 50, index: 1, isCurrent: false)
-        let second = WindowSpace(id: 10, index: 2, isCurrent: false)
+        let first = WindowSpace(id: 50, index: 1, isCurrent: false, kind: .desktop(number: 1))
+        let second = WindowSpace(id: 10, index: 2, isCurrent: false, kind: .desktop(number: 2))
         let windows = [window("b", app: "Zulu", space: first), window("c", app: "Alpha", space: second),
                        window("a", app: "Alpha", space: first)]
         let expected = ["a", "b", "c"]
@@ -30,8 +30,8 @@ final class WindowSpaceTests: XCTestCase {
     }
 
     func testSearchKeepsCurrentDesktopAheadOfStrongerOtherDesktopMatch() {
-        let current = WindowSpace(id: 2, index: 2, isCurrent: true)
-        let other = WindowSpace(id: 1, index: 1, isCurrent: false)
+        let current = WindowSpace(id: 2, index: 2, isCurrent: true, kind: .desktop(number: 2))
+        let other = WindowSpace(id: 1, index: 1, isCurrent: false, kind: .desktop(number: 1))
         let windows = [window("other", app: "Code", space: other), window("current", app: "My Code", space: current)]
         let results = WindowSwitcher.filter(windows, query: "code", allSpaces: true)
         XCTAssertEqual(results.map(\.window.id), ["current", "other"])
@@ -45,9 +45,9 @@ final class WindowSpaceTests: XCTestCase {
     }
 
     func testVisibleSpacesKeepOrderAndOnlyDropOtherDesktops() {
-        let spaces: [WindowSpace?] = [nil, WindowSpace(id: 1, index: 1, isCurrent: true),
-                                      WindowSpace(id: 2, index: 2, isCurrent: false),
-                                      WindowSpace(id: 3, index: 3, isCurrent: false, isFullscreen: true)]
+        let spaces: [WindowSpace?] = [nil, WindowSpace(id: 1, index: 1, isCurrent: true, kind: .desktop(number: 1)),
+                                      WindowSpace(id: 2, index: 2, isCurrent: false, kind: .desktop(number: 2)),
+                                      WindowSpace(id: 3, index: 3, isCurrent: false, kind: .fullscreen)]
         var generator = SystemRandomNumberGenerator()
         for _ in 0..<200 {
             let windows = (0..<Int.random(in: 0...12, using: &generator)).map {

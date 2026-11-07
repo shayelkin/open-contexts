@@ -91,8 +91,8 @@ enum WindowSpaces {
     /// targets count as unresolvable until the targets change, instead of being probed on every scan forever.
     static let maxElementID: UInt64 = 10_000
 
-    /// Spaces in Mission Control order. `index` orders all of them; `desktopNumber` counts only desktops on
-    /// each display, as Mission Control labels them, and is nil for full-screen spaces.
+    /// Spaces in Mission Control order. `index` orders all of them; a desktop's number counts only desktops on
+    /// its display, as Mission Control labels them.
     static func spaces(fromDisplays displays: [[String: Any]]) -> [WindowSpace] {
         var spaces: [WindowSpace] = []
         for display in displays {
@@ -100,10 +100,16 @@ enum WindowSpaces {
             var desktops = 0
             for raw in display["Spaces"] as? [[String: Any]] ?? [] {
                 guard let id = raw["id64"] as? NSNumber else { continue }
-                let isFullscreen = (raw["type"] as? Int) == 4
-                if !isFullscreen { desktops += 1 }
+                let kind: WindowSpace.Kind
+                switch raw["type"] as? Int {
+                case 4:
+                    kind = .fullscreen
+                default:
+                    desktops += 1
+                    kind = .desktop(number: desktops)
+                }
                 spaces.append(WindowSpace(id: id.uint64Value, index: spaces.count + 1, isCurrent: id == current,
-                                          isFullscreen: isFullscreen, desktopNumber: isFullscreen ? nil : desktops))
+                                          kind: kind))
             }
         }
         return spaces

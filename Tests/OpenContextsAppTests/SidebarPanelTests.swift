@@ -979,7 +979,7 @@ final class SidebarPanelTests: XCTestCase {
         let rows = windowRows().map(ObjectIdentifier.init)
         var retitled = original
         retitled[1].title = "Renamed window"
-        retitled[2].space = WindowSpace(id: 9, index: 9, isCurrent: false)
+        retitled[2].space = WindowSpace(id: 9, index: 9, isCurrent: false, kind: .desktop(number: 9))
         render(retitled)
         XCTAssertEqual(windowRows().map(ObjectIdentifier.init), rows, "a title change rebuilt the rows")
         XCTAssertEqual(windowRows().map(\.titleLabel.stringValue), retitled.map(\.displayTitle))

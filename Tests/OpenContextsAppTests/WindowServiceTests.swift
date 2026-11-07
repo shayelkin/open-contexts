@@ -196,7 +196,7 @@ final class WindowServiceTests: XCTestCase {
         func window(_ id: String, pid: pid_t, frame: CGRect, current: Bool = true) -> WindowService.TrackedWindow {
             WindowService.TrackedWindow(id: id, element: AXUIElementCreateApplication(pid),
                                         info: WindowInfo(id: id, appID: id, appName: id, title: id, processID: pid,
-                                                         space: WindowSpace(id: 1, index: 1, isCurrent: current)),
+                                                         space: WindowSpace(id: 1, index: 1, isCurrent: current, kind: .desktop(number: 1))),
                                         frame: frame)
         }
         let full = window("full", pid: 11, frame: CGRect(x: 0, y: 25, width: 1000, height: 775))
@@ -248,8 +248,8 @@ final class WindowServiceTests: XCTestCase {
         let spaces = WindowSpaces.spaces(fromDisplays: displays)
         XCTAssertEqual(spaces.map(\.id), [11, 12, 13, 21, 22, 23])
         XCTAssertEqual(spaces.map(\.index), [1, 2, 3, 4, 5, 6])
-        XCTAssertEqual(spaces.map(\.desktopNumber), [1, nil, 2, nil, 1, 2])
-        XCTAssertEqual(spaces.map(\.isFullscreen), [false, true, false, true, false, false])
+        XCTAssertEqual(spaces.map(\.kind), [.desktop(number: 1), .fullscreen, .desktop(number: 2),
+                                            .fullscreen, .desktop(number: 1), .desktop(number: 2)])
         XCTAssertEqual(spaces.filter(\.isCurrent).map(\.id), [12, 22])
         XCTAssertEqual(WindowSpaces.spaces(fromDisplays: []), [])
     }
@@ -622,7 +622,7 @@ final class WindowServiceAccessibilityTests: XCTestCase {
         let space = try XCTUnwrap(original.info.space)
         XCTAssertTrue(space.isCurrent)
         var target = original
-        target.info.space = WindowSpace(id: space.id, index: space.index, isCurrent: false)
+        target.info.space = WindowSpace(id: space.id, index: space.index, isCurrent: false, kind: space.kind)
         service.apply(WindowService.ScanResult(windows: [target], focusedID: nil, fullscreenScreenIDs: [],
                                                activeAppIDs: [target.info.appID], badgeReads: [:]))
         let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 240, height: 120),

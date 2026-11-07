@@ -133,9 +133,9 @@ final class SwitcherPanelTests: XCTestCase {
     func testDesktopHeadersGroupWindowsBySpace() {
         let windows = [
             WindowInfo(id: "current-space", appID: "Editor", appName: "Editor", title: "Project", processID: 0,
-                       space: WindowSpace(id: 2, index: 2, isCurrent: true)),
+                       space: WindowSpace(id: 2, index: 2, isCurrent: true, kind: .desktop(number: 2))),
             WindowInfo(id: "other-space", appID: "Browser", appName: "Browser", title: "Project", processID: 0,
-                       space: WindowSpace(id: 1, index: 1, isCurrent: false))
+                       space: WindowSpace(id: 1, index: 1, isCurrent: false, kind: .desktop(number: 1)))
         ]
         let grouped = WindowSwitcher.filter(windows, query: "", allSpaces: true)
         switcher.show(results: grouped, selectedIndex: 1, groupBySpace: true, language: .zh)
@@ -154,9 +154,9 @@ final class SwitcherPanelTests: XCTestCase {
 
         let labelled = [
             WindowInfo(id: "desktop", appID: "Editor", appName: "Editor", title: "Doc", processID: 0,
-                       space: WindowSpace(id: 3, index: 3, isCurrent: false, desktopNumber: 2)),
+                       space: WindowSpace(id: 3, index: 3, isCurrent: false, kind: .desktop(number: 2))),
             WindowInfo(id: "fullscreen", appID: "Player", appName: "Player", title: "Movie", processID: 0,
-                       space: WindowSpace(id: 4, index: 4, isCurrent: false, isFullscreen: true))
+                       space: WindowSpace(id: 4, index: 4, isCurrent: false, kind: .fullscreen))
         ]
         switcher.update(results: WindowSwitcher.filter(labelled, query: "", allSpaces: true), selectedIndex: 0,
                         groupBySpace: true, language: .en)

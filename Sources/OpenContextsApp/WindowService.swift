@@ -47,7 +47,7 @@ final class WindowService: ObservableObject {
         let focusedID: String?
         let fullscreenScreenIDs: Set<UInt32>
         let activeAppIDs: Set<String>
-        let badgeReads: [String: DockBadgeRead]?
+        let badgeReads: [String: String?]
         var discoveries: [pid_t: WindowSpaces.DiscoveryState] = [:]
         var spaceSnapshot: WindowSpaces.Snapshot?
         var pendingTabs: Set<CGWindowID> = []
@@ -79,7 +79,6 @@ final class WindowService: ObservableObject {
     private var pendingTabs: Set<CGWindowID> = []
     private var spaceSnapshot: WindowSpaces.Snapshot?
     private var lastBadgeScanAt = -Double.infinity
-    private var badgeState = DockBadgeState()
     let scanQueue = DispatchQueue(label: "OpenContexts.WindowScan", qos: .userInitiated)
     private let isTrusted: () -> Bool
 
@@ -143,7 +142,7 @@ final class WindowService: ObservableObject {
         scanQueue.async { [weak self] in
             let result = Self.scan(applications: applications, previous: previous,
                                    frontmostPID: frontmostPID,
-                                   badgeReads: scanBadges ? dockPID.flatMap(Self.scanDockBadges) : nil,
+                                   badgeReads: dockPID.flatMap(Self.scanDockBadges) ?? [:],
                                    allSpaces: allSpaces, discoveries: discoveryState, discoveryPass: pass,
                                    pendingTabs: pending)
             Task { @MainActor [weak self] in self?.apply(result) }
@@ -190,8 +189,8 @@ final class WindowService: ObservableObject {
         let byID = Dictionary(uniqueKeysWithValues: discovered.map { ($0.id, $0) })
         tracked = orderedIDs.compactMap { byID[$0] }
         if fullscreenScreenIDs != result.fullscreenScreenIDs { fullscreenScreenIDs = result.fullscreenScreenIDs }
-        badgeState.merge(activeAppIDs: result.activeAppIDs, reads: result.badgeReads)
-        if appBadges != badgeState.badges { appBadges = badgeState.badges }
+        let badges = DockBadges.merged(appBadges, activeAppIDs: result.activeAppIDs, reads: result.badgeReads)
+        if appBadges != badges { appBadges = badges }
         hasCompletedInitialScan = true
         publishWindows()
     }
@@ -388,7 +387,7 @@ final class WindowService: ObservableObject {
         applications: [ApplicationSnapshot],
         previous: [TrackedWindow],
         frontmostPID: pid_t?,
-        badgeReads: [String: DockBadgeRead]?,
+        badgeReads: [String: String?],
         allSpaces: Bool = false, discoveries: [pid_t: WindowSpaces.DiscoveryState] = [:], discoveryPass: Int = 0,
         pendingTabs: Set<CGWindowID> = []
     ) -> ScanResult {
@@ -667,26 +666,26 @@ final class WindowService: ObservableObject {
         return Set(windows.compactMap { ($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value })
     }
 
-    nonisolated static func scanDockBadges(processID: pid_t) -> [String: DockBadgeRead]? {
+    nonisolated static func scanDockBadges(processID: pid_t) -> [String: String?]? {
         let dock = AXUIElementCreateApplication(processID)
         AXUIElementSetMessagingTimeout(dock, 0.15)
         let rootChildren: AttributeRead<[AXUIElement]> = readAttribute(kAXChildrenAttribute, of: dock)
         guard case let .value(children) = rootChildren else { return nil }
 
         var pending = children.map { ($0, 0) }
-        var reads: [String: DockBadgeRead] = [:]
+        var reads: [String: String?] = [:]
         while let (element, depth) = pending.popLast() {
             AXUIElementSetMessagingTimeout(element, 0.15)
             let role: String? = attribute(kAXRoleAttribute, of: element)
             if role == "AXDockItem" {
                 let urlRead: AttributeRead<URL> = readAttribute(kAXURLAttribute, of: element)
                 guard case let .value(url) = urlRead,
-                      let appID = DockBadgeState.appID(for: url) else { continue }
+                      let appID = DockBadges.appID(for: url) else { continue }
                 let statusRead: AttributeRead<String> = readAttribute("AXStatusLabel", of: element)
                 switch statusRead {
-                case let .value(value): reads[appID] = .value(value)
-                case .noValue: reads[appID] = .value(nil)
-                case .failure: reads[appID] = .failure
+                case let .value(value): reads[appID] = .some(value)
+                case .noValue: reads[appID] = .some(nil)
+                case .failure: continue
                 }
             } else if depth < 7 {
                 let childrenRead: AttributeRead<[AXUIElement]> = readAttribute(kAXChildrenAttribute, of: element)

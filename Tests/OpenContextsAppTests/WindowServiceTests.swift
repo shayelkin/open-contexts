@@ -23,7 +23,7 @@ final class WindowServiceTests: XCTestCase {
 
     private func scanResult(_ windows: [WindowService.TrackedWindow], focusedID: String? = nil) -> WindowService.ScanResult {
         WindowService.ScanResult(windows: windows, focusedID: focusedID, fullscreenScreenIDs: [],
-                                 activeAppIDs: [], badgeReads: nil)
+                                 activeAppIDs: [], badgeReads: [:])
     }
 
     func testLocalWindowRegistrationIsDeduplicatedAndSurvivesScans() {
@@ -467,7 +467,7 @@ final class WindowServiceAccessibilityTests: XCTestCase {
         for pass in 0..<30 {
             let result = WindowService.scan(applications: applications, previous: previous,
                                             frontmostPID: NSWorkspace.shared.frontmostApplication?.processIdentifier,
-                                            badgeReads: nil, allSpaces: true, discoveries: discoveryState,
+                                            badgeReads: [:], allSpaces: true, discoveries: discoveryState,
                                             discoveryPass: pass, pendingTabs: pendingTabs)
             previous = result.windows
             discoveryState = result.discoveries
@@ -624,7 +624,7 @@ final class WindowServiceAccessibilityTests: XCTestCase {
         var target = original
         target.info.space = WindowSpace(id: space.id, index: space.index, isCurrent: false)
         service.apply(WindowService.ScanResult(windows: [target], focusedID: nil, fullscreenScreenIDs: [],
-                                               activeAppIDs: [target.info.appID], badgeReads: nil))
+                                               activeAppIDs: [target.info.appID], badgeReads: [:]))
         let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 240, height: 120),
                               styleMask: [.titled], backing: .buffered, defer: false)
         window.title = "Activation regression check"
@@ -777,11 +777,11 @@ final class WindowServiceAccessibilityTests: XCTestCase {
         let snapshot = [WindowService.ApplicationSnapshot(processID: app.processIdentifier, appID: bundleID,
                                                           appName: bundleID)]
         var result = WindowService.scan(applications: snapshot, previous: [], frontmostPID: nil,
-                                        badgeReads: nil, allSpaces: true)
+                                        badgeReads: [:], allSpaces: true)
         for pass in 1..<100 where !isReady(fixtureWindows(result)) {
             try await Task.sleep(for: .milliseconds(50))
             result = WindowService.scan(applications: snapshot, previous: result.windows, frontmostPID: nil,
-                                        badgeReads: nil, allSpaces: true, discoveries: result.discoveries,
+                                        badgeReads: [:], allSpaces: true, discoveries: result.discoveries,
                                         discoveryPass: pass, pendingTabs: result.pendingTabs)
         }
         let windows = fixtureWindows(result)
@@ -789,7 +789,7 @@ final class WindowServiceAccessibilityTests: XCTestCase {
         let target = try XCTUnwrap(windows.first)
         let service = WindowService()
         service.apply(WindowService.ScanResult(windows: windows, focusedID: nil, fullscreenScreenIDs: [],
-                                               activeAppIDs: [bundleID], badgeReads: nil))
+                                               activeAppIDs: [bundleID], badgeReads: [:]))
         return (service, target)
     }
 

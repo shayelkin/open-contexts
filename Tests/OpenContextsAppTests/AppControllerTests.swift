@@ -124,7 +124,7 @@ final class AppControllerTests: XCTestCase {
     }
 
     private func scan(_ windows: [WindowService.TrackedWindow], focusedID: String? = nil,
-                      fullscreen: Set<UInt32> = [], badges: [String: DockBadgeRead]? = nil) async {
+                      fullscreen: Set<UInt32> = [], badges: [String: String?] = [:]) async {
         service.apply(WindowService.ScanResult(
             windows: windows, focusedID: focusedID, fullscreenScreenIDs: fullscreen,
             activeAppIDs: Set(windows.map(\.info.appID)), badgeReads: badges
@@ -306,7 +306,7 @@ final class AppControllerTests: XCTestCase {
         await launch()
         let fullscreenID = try XCTUnwrap(controller.sidebars.keys.first)
         await scan([window("a"), window("b")], focusedID: "b", fullscreen: [fullscreenID],
-                   badges: [Self.editorID: .value("3")])
+                   badges: [Self.editorID: "3"])
 
         for (id, panel) in controller.sidebars {
             let rows = panel.sidebarRows.filter { if case .window = $0.style { return true }; return false }
@@ -316,7 +316,7 @@ final class AppControllerTests: XCTestCase {
                            "only the full-screen display should hide its sidebar")
         }
 
-        await scan([window("a"), window("b")], focusedID: "a", badges: [Self.editorID: .value(nil)])
+        await scan([window("a"), window("b")], focusedID: "a", badges: [Self.editorID: nil])
         for panel in sidebars {
             let rows = panel.sidebarRows.filter { if case .window = $0.style { return true }; return false }
             XCTAssertEqual(rows.filter(\.selected).map(\.titleLabel.stringValue), ["a"])

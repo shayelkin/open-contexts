@@ -6,6 +6,7 @@ let package = Package(
     defaultLocalization: "en",
     platforms: [.macOS(.v13)],
     products: [.library(name: "OpenContextsApp", targets: ["OpenContextsApp"])],
+    dependencies: [.package(url: "https://github.com/x-sheep/swift-property-based", from: "2.0.1")],
     targets: [
         .target(name: "OpenContextsCore"),
         .target(
@@ -13,7 +14,10 @@ let package = Package(
             dependencies: ["OpenContextsCore"],
             resources: [.process("Resources")]
         ),
-        .testTarget(name: "OpenContextsCoreTests", dependencies: ["OpenContextsCore"]),
+        .testTarget(
+            name: "OpenContextsCoreTests",
+            dependencies: ["OpenContextsCore", .product(name: "PropertyBased", package: "swift-property-based")]
+        ),
         .testTarget(name: "OpenContextsAppTests", dependencies: ["OpenContextsApp"])
     ]
 )

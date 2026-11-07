@@ -1,63 +1,130 @@
-import XCTest
+import PropertyBased
+import Testing
 @testable import OpenContextsCore
 
-final class WindowSpaceTests: XCTestCase {
-    private func window(_ id: String, app: String, space: WindowSpace?) -> WindowInfo {
-        WindowInfo(id: id, appID: app, appName: app, title: "Project", processID: 1, space: space)
+private let appNames = ["Code", "code", "My Code", "Alpha", "Zulu", "Écran"]
+private let titles = ["", " ", "Project", "project", "Code 2", "Code 10"]
+
+/// 1–5 spaces with distinct IDs and Mission Control indexes, each randomly current and desktop or full screen.
+private let spaces = zip(Gen<[Int]>.shuffled(Array(1...8)), Gen.bool.array(of: 5), Gen.bool.array(of: 5), Gen.int(in: 1...5))
+    .map { indexes, isCurrent, isFullscreen, count in
+        (0..<count).map { i in
+            WindowSpace(id: UInt64(100 + i), index: indexes[i], isCurrent: isCurrent[i],
+                        kind: isFullscreen[i] ? .fullscreen : .desktop(number: indexes[i]))
+        }
     }
 
-    func testCurrentDesktopIsFirstAndKeepsRecentOrder() {
-        let current = WindowSpace(id: 30, index: 3, isCurrent: true, kind: .desktop(number: 3))
-        let other = WindowSpace(id: 10, index: 1, isCurrent: false, kind: .desktop(number: 1))
-        let windows = [window("old-other", app: "Zulu", space: other),
-                       window("recent", app: "Zulu", space: current),
-                       window("older", app: "Alpha", space: current),
-                       window("new-other", app: "Alpha", space: other)]
-        XCTAssertEqual(WindowSwitcher.filter(windows, query: "", allSpaces: true).map(\.window.id),
-                       ["recent", "older", "new-other", "old-other"])
-        XCTAssertEqual(WindowSwitcher.filter(windows, query: "", allSpaces: false).map(\.window.id),
-                       ["recent", "older"])
+/// Up to 12 windows, as indexes into `appNames`, `titles` and the spaces, where 0 is an unknown space.
+private let windowSpecs = zip(Gen.int(in: 0..<appNames.count), Gen.int(in: 0..<titles.count), Gen.int(in: 0...5))
+    .array(of: 0...12)
+
+private let query = Gen<String?>.element(of: ["", "code", "co", "a", "pro", "zz", "c p", "my code"]).map { $0! }
+
+private func makeWindows(_ spaces: [WindowSpace], _ specs: [(Int, Int, Int)]) -> [WindowInfo] {
+    specs.enumerated().map { n, spec in
+        WindowInfo(id: "w\(n)", appID: appNames[spec.0], appName: appNames[spec.0], title: titles[spec.1],
+                   processID: 1, space: spec.2 == 0 ? nil : spaces[(spec.2 - 1) % spaces.count])
+    }
+}
+
+/// The first window of each run of consecutive windows on the same space.
+private func runs(_ windows: [WindowInfo]) -> [WindowInfo] {
+    windows.enumerated().filter { $0.offset == 0 || windows[$0.offset - 1].space?.id != $0.element.space?.id }
+        .map(\.element)
+}
+
+private func forEachScenario(
+    sourceLocation: SourceLocation = #_sourceLocation, _ body: ([WindowInfo], String) -> Void
+) async {
+    await propertyCheck(count: 500, input: spaces, windowSpecs, query, perform: { spaces, specs, query in
+        body(makeWindows(spaces, specs), query)
+    }, sourceLocation: sourceLocation)
+}
+
+private func switcher(_ windows: [WindowInfo], _ query: String = "", allSpaces: Bool = true) -> [WindowInfo] {
+    WindowSwitcher.filter(windows, query: query, allSpaces: allSpaces).map(\.window)
+}
+
+struct WindowSpaceTests {
+    @Test func searchReturnsEachMatchingWindowOnce() async {
+        await forEachScenario { windows, query in
+            let matching = windows.filter { WindowSearch.match($0, query: query) != nil }
+            let all = switcher(windows, query)
+            #expect(all.map(\.id).sorted() == matching.map(\.id).sorted(), "should list every match once")
+            let current = switcher(windows, query, allSpaces: false)
+            #expect(current.map(\.id).sorted() == matching.filter(\.isOnCurrentSpace).map(\.id).sorted(),
+                    "should list every match on the current space once")
+        }
     }
 
-    func testOtherDesktopsIgnoreRecentOrderAndFollowDesktopIndex() {
-        let first = WindowSpace(id: 50, index: 1, isCurrent: false, kind: .desktop(number: 1))
-        let second = WindowSpace(id: 10, index: 2, isCurrent: false, kind: .desktop(number: 2))
-        let windows = [window("b", app: "Zulu", space: first), window("c", app: "Alpha", space: second),
-                       window("a", app: "Alpha", space: first)]
-        let expected = ["a", "b", "c"]
-        XCTAssertEqual(WindowSwitcher.filter(windows, query: "", allSpaces: true).map(\.window.id), expected)
-        XCTAssertEqual(WindowSwitcher.filter(windows.reversed(), query: "", allSpaces: true).map(\.window.id), expected)
+    @Test func currentSpaceOnlyKeepsRecentOrder() async {
+        await forEachScenario { windows, _ in
+            #expect(switcher(windows, allSpaces: false) == windows.filter(\.isOnCurrentSpace),
+                    "should keep current-space windows in recent order")
+        }
     }
 
-    func testSearchKeepsCurrentDesktopAheadOfStrongerOtherDesktopMatch() {
-        let current = WindowSpace(id: 2, index: 2, isCurrent: true, kind: .desktop(number: 2))
-        let other = WindowSpace(id: 1, index: 1, isCurrent: false, kind: .desktop(number: 1))
-        let windows = [window("other", app: "Code", space: other), window("current", app: "My Code", space: current)]
-        let results = WindowSwitcher.filter(windows, query: "code", allSpaces: true)
-        XCTAssertEqual(results.map(\.window.id), ["current", "other"])
-        XCTAssertFalse(results[0].appRanges.isEmpty)
-        XCTAssertTrue(WindowSwitcher.filter(windows, query: "missing", allSpaces: true).isEmpty)
+    @Test func currentSpacesComeFirst() async {
+        await forEachScenario { windows, query in
+            let afterFirstOtherSpace = switcher(windows, query).drop { $0.isOnCurrentSpace }
+            #expect(!afterFirstOtherSpace.contains { $0.isOnCurrentSpace },
+                    "no current-space window should follow another space's window")
+        }
     }
 
-    func testUnknownDesktopRemainsAvailableWhenTopologyIsUnavailable() {
-        let windows = [window("fallback", app: "Editor", space: nil)]
-        XCTAssertEqual(WindowSwitcher.filter(windows, query: "", allSpaces: false).map(\.window.id), ["fallback"])
+    @Test func eachSpaceIsListedTogether() async {
+        await forEachScenario { windows, query in
+            let spaceIDs = runs(switcher(windows, query)).map(\.space?.id)
+            #expect(Set(spaceIDs).count == spaceIDs.count, "a space's windows should not be split")
+        }
     }
 
-    func testVisibleSpacesKeepOrderAndOnlyDropOtherDesktops() {
-        let spaces: [WindowSpace?] = [nil, WindowSpace(id: 1, index: 1, isCurrent: true, kind: .desktop(number: 1)),
-                                      WindowSpace(id: 2, index: 2, isCurrent: false, kind: .desktop(number: 2)),
-                                      WindowSpace(id: 3, index: 3, isCurrent: false, kind: .fullscreen)]
-        var generator = SystemRandomNumberGenerator()
-        for _ in 0..<200 {
-            let windows = (0..<Int.random(in: 0...12, using: &generator)).map {
-                window("w\($0)", app: "App", space: spaces.randomElement(using: &generator)!)
+    @Test func spacesFollowMissionControlOrder() async {
+        await forEachScenario { windows, query in
+            let runs = runs(switcher(windows, query))
+            for isCurrent in [true, false] {
+                let indexes = runs.filter { $0.isOnCurrentSpace == isCurrent }.map { $0.space?.index ?? 0 }
+                #expect(indexes == indexes.sorted(), "spaces should follow Mission Control order")
             }
-            XCTAssertEqual(windows.onVisibleSpaces(allSpaces: true), windows)
-            let current = windows.onVisibleSpaces(allSpaces: false)
-            XCTAssertEqual(current, windows.filter { $0.space?.isCurrent != false })
-            XCTAssertTrue(current.allSatisfy(\.isOnCurrentSpace))
-            XCTAssertEqual(windows.filter { !$0.isOnCurrentSpace }.count + current.count, windows.count)
+        }
+    }
+
+    @Test func currentSpacesKeepRecentOrder() async {
+        await forEachScenario { windows, _ in
+            let results = switcher(windows)
+            for spaceID in Set(windows.filter(\.isOnCurrentSpace).map(\.space?.id)) {
+                #expect(results.filter { $0.space?.id == spaceID } == windows.filter { $0.space?.id == spaceID },
+                        "a current space should keep its windows in recent order")
+            }
+        }
+    }
+
+    @Test func otherSpacesListAppsAlphabetically() async {
+        await forEachScenario { windows, _ in
+            let others = switcher(windows).filter { !$0.isOnCurrentSpace }
+            for (a, b) in zip(others, others.dropFirst()) where a.space?.id == b.space?.id {
+                #expect(a.appName.localizedStandardCompare(b.appName) != .orderedDescending,
+                        "\(a.appName) should not come after \(b.appName)")
+            }
+        }
+    }
+
+    @Test func otherSpacesIgnoreRecentOrder() async {
+        await propertyCheck(count: 500, input: spaces, windowSpecs, query, Gen<[Int]>.shuffled(Array(0..<12))) {
+            spaces, specs, query, permutation in
+            let windows = makeWindows(spaces, specs)
+            let shuffled = permutation.filter { $0 < windows.count }.map { windows[$0] }
+            #expect(switcher(shuffled, query).filter { !$0.isOnCurrentSpace }
+                        == switcher(windows, query).filter { !$0.isOnCurrentSpace },
+                    "other spaces' order should not depend on recent order")
+        }
+    }
+
+    @Test func visibleSpacesDropOnlyOtherSpaces() async {
+        await forEachScenario { windows, _ in
+            #expect(windows.onVisibleSpaces(allSpaces: true) == windows, "all spaces should keep every window")
+            #expect(windows.onVisibleSpaces(allSpaces: false) == windows.filter { $0.space?.isCurrent != false },
+                    "should keep windows on current or unknown spaces, in order")
         }
     }
 }

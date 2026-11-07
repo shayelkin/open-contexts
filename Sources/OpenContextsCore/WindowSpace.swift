@@ -23,28 +23,26 @@ public struct WindowSpace: Equatable, Sendable {
 public enum WindowSwitcher {
     public static func filter(_ windows: [WindowInfo], query: String, allSpaces: Bool) -> [WindowSearch.Match] {
         guard allSpaces else { return WindowSearch.filter(windows.filter(\.isOnCurrentSpace), query: query) }
-        let ordered = windows.enumerated().sorted { lhs, rhs in
-            let a = lhs.element, b = rhs.element
-            if a.isOnCurrentSpace != b.isOnCurrentSpace { return a.isOnCurrentSpace }
-            if a.space?.id != b.space?.id {
-                return (a.space?.index ?? 0) < (b.space?.index ?? 0)
-            }
-            if a.isOnCurrentSpace { return lhs.offset < rhs.offset }
-            let appOrder = a.appName.localizedStandardCompare(b.appName)
-            if appOrder != .orderedSame { return appOrder == .orderedAscending }
-            let titleOrder = a.displayTitle.localizedStandardCompare(b.displayTitle)
-            return titleOrder == .orderedSame ? a.id < b.id : titleOrder == .orderedAscending
-        }.map(\.element)
-        var results: [WindowSearch.Match] = []
-        var group: [WindowInfo] = []
-        for window in ordered {
-            if let previous = group.last, previous.space?.id != window.space?.id {
-                results += WindowSearch.filter(group, query: query)
-                group.removeAll(keepingCapacity: true)
-            }
-            group.append(window)
+        let groups = Dictionary(grouping: windows) { $0.space?.id }.values.sorted { a, b in
+            a[0].isOnCurrentSpace != b[0].isOnCurrentSpace ? a[0].isOnCurrentSpace
+                : (a[0].space?.index ?? 0) < (b[0].space?.index ?? 0)
         }
-        return results + WindowSearch.filter(group, query: query)
+        return groups.flatMap { group in
+            WindowSearch.filter(group[0].isOnCurrentSpace ? group : group.sorted(by: alphabetically), query: query)
+        }
+    }
+
+    private static func alphabetically(_ a: WindowInfo, _ b: WindowInfo) -> Bool {
+        let appOrder = a.appName.localizedStandardCompare(b.appName)
+        if appOrder != .orderedSame { return appOrder == .orderedAscending }
+        switch a.displayTitle.localizedStandardCompare(b.displayTitle) {
+        case .orderedAscending:
+            return true
+        case .orderedDescending:
+            return false
+        case .orderedSame:
+            return a.id < b.id
+        }
     }
 }
 
